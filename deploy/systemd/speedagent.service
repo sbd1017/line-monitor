@@ -1,0 +1,63 @@
+[Unit]
+Description=speedagent: broadband measurement agent (speed tests + connectivity probes)
+Documentation=file:///home/pi/line-monitor/docs/OPERATIONS.md
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=speedagent
+Group=speedagent
+# video: vcgencmd get_throttled (Pi under-voltage / throttling flags)
+SupplementaryGroups=video
+WorkingDirectory=/home/pi/line-monitor
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=SPEEDAGENT_ENV=production
+Environment=SPEEDAGENT_ID=pi
+Environment=SPEEDAGENT_STATE_DIR=/var/lib/speedagent
+Environment=SPEEDAGENT_BACKEND=http://127.0.0.1:8772/speedtest/agent/v1
+Environment=SPEEDAGENT_OOKLA=/opt/speedmon/engines/ookla-1.2.0/speedtest
+Environment=SPEEDAGENT_SPEEDTEST_GO=/opt/speedmon/engines/speedtest-go-1.8.3/speedtest-go
+# Public summary of the latest test (no IPs) for other apps on the Pi. It lives outside the 0700 state
+# directory on purpose, so that directory (agent database, public IP) stays private.
+Environment=SPEEDAGENT_LATEST_FILE=/var/cache/speedagent/latest.json
+LoadCredential=agent-key:/etc/speedmon/agent.key
+StateDirectory=speedagent
+StateDirectoryMode=0700
+CacheDirectory=speedagent
+CacheDirectoryMode=0755
+ExecStart=/home/pi/line-monitor/.venv/bin/python -m speedagent
+# SIGUSR1 = run a test now (sudo systemctl kill --kill-whom=main -s USR1 speedagent). SIGTERM = clean stop.
+# mixed: the stop signal goes to the agent only, so a running speed test (a child process) completes first;
+# anything left after TimeoutStopSec is killed.
+KillSignal=SIGTERM
+KillMode=mixed
+TimeoutStopSec=180
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+MemoryMax=512M
+TasksMax=64
+Nice=-2
+
+[Install]
+WantedBy=multi-user.target

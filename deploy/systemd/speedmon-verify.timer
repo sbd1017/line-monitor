@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly speedmon integrity verification
+
+[Timer]
+OnCalendar=Sun *-*-* 04:23
+Persistent=true
+
+[Install]
+WantedBy=timers.target

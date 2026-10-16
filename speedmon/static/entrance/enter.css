@@ -1,0 +1,19 @@
+:root{color-scheme:dark;--bg:#05080d;--ink:#e8f1f8;--mute:#7b8a9a;--acc:#5ef2d6;--line:#16222f}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);font:15px/1.4 ui-sans-serif,-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif}
+.gate{min-height:100%;display:grid;place-items:center;padding:24px;position:relative;overflow:hidden}
+.fibre{position:absolute;inset:0;pointer-events:none}
+.fibre span{position:absolute;left:-10%;width:120%;height:1px;background:linear-gradient(90deg,transparent,rgba(94,242,214,.0) 30%,rgba(94,242,214,.55) 50%,rgba(94,242,214,0) 70%,transparent);background-size:40% 100%;background-repeat:no-repeat;animation:run 6s linear infinite;opacity:.6}
+.fibre span:nth-child(1){top:38%}.fibre span:nth-child(2){top:52%;animation-delay:-2s;animation-duration:7.5s}.fibre span:nth-child(3){top:66%;animation-delay:-4s;animation-duration:5s}
+.fibre::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 50% at 50% 50%,rgba(94,242,214,.06),transparent 70%)}
+@keyframes run{from{background-position:-40% 0}to{background-position:140% 0}}
+.panel{position:relative;width:min(360px,100%);padding:32px 28px;border:1px solid var(--line);border-radius:14px;background:rgba(8,13,20,.86);backdrop-filter:blur(12px)}
+.kicker{font:600 11px/1 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--acc)}
+h1{font-size:44px;line-height:.95;letter-spacing:-.03em;margin:14px 0 28px;font-weight:700}
+label{display:block;font-size:12px;color:var(--mute);margin-bottom:8px}
+input{width:100%;padding:12px 14px;border-radius:8px;border:1px solid #233243;background:#09111a;color:var(--ink);font:16px ui-monospace,"SF Mono",Menlo,monospace;outline:none}
+input:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(94,242,214,.15)}
+button{margin-top:16px;width:100%;padding:12px;border:0;border-radius:8px;background:var(--acc);color:#04120f;font-weight:700;font-size:15px;cursor:pointer}
+button:hover{filter:brightness(1.08)}
+.miss{margin-top:14px;color:#ff8a7a;font-size:13px}
+@media (prefers-reduced-motion:reduce){.fibre span{animation:none}}

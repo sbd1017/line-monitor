@@ -1,0 +1,58 @@
+[Unit]
+Description=speedmon: broadband evidence platform backend (https://example.com/speedtest/)
+Documentation=file:///home/pi/line-monitor/docs/OPERATIONS.md
+After=network.target
+
+[Service]
+Type=simple
+User=speedmon
+Group=speedmon
+WorkingDirectory=/home/pi/line-monitor
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=SPEEDMON_ENV=production
+Environment=SPEEDMON_HOST=127.0.0.1
+Environment=SPEEDMON_PORT=8772
+Environment=SPEEDMON_DATA_DIR=/home/pi/line-monitor/var
+# Public-safe status for other apps on the Pi, such as a home dashboard tile (no IPs; speedmon/statusfile.py).
+Environment=SPEEDMON_STATUS_FILE=/run/speedmon/status.json
+RuntimeDirectory=speedmon
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=restart
+# Shared HMAC key for the agent (root 0600 on disk; systemd hands this service a private copy).
+LoadCredential=agent-key:/etc/speedmon/agent.key
+ExecStart=/home/pi/line-monitor/.venv/bin/python -m speedmon.serve
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/line-monitor/var
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+RemoveIPC=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Reached only by nginx and the agent on this host; it talks to nothing.
+IPAddressDeny=any
+IPAddressAllow=localhost
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+MemoryMax=1G
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

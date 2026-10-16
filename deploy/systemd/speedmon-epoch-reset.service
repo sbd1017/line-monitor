@@ -1,0 +1,9 @@
+[Unit]
+Description=speedmon: planned fresh start when due (archive everything, start a fresh evidence database)
+Documentation=file:///home/pi/line-monitor/docs/OPERATIONS.md
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pi/line-monitor
+ExecStart=/home/pi/line-monitor/scripts/epoch-reset.sh
+TimeoutStartSec=900

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="same-origin">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#05080d">
+<title>Line Monitor · sign in</title>
+<link rel="icon" href="{{ u('/static/entrance/icon.svg') }}?v={{ V }}" type="image/svg+xml">
+<link rel="stylesheet" href="{{ u('/static/entrance/enter.css') }}?v={{ V }}">
+</head>
+<body>
+<main class="gate">
+  <div class="fibre" aria-hidden="true"><span></span><span></span><span></span></div>
+  <form class="panel" method="post" action="{{ u('/enter') }}" autocomplete="off">
+    <p class="kicker">example.com / speedtest</p>
+    <h1>Line<br>Monitor</h1>
+    <label for="phrase">Access phrase</label>
+    <input id="phrase" name="phrase" type="password" maxlength="256" required autofocus autocomplete="current-password"
+           autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+    <button type="submit">Enter</button>
+    {% if miss %}<p class="miss" role="alert">Not recognised.</p>{% endif %}
+  </form>
+</main>
+</body>
+</html>

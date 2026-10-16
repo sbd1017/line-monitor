@@ -1,0 +1,20 @@
+[Unit]
+Description=speedmon: full integrity verification (re-hash every record, walk the chain); result in the journal
+
+[Service]
+Type=oneshot
+User=speedmon
+Group=speedmon
+WorkingDirectory=/home/pi/line-monitor
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=SPEEDMON_ENV=production
+Environment=SPEEDMON_DATA_DIR=/home/pi/line-monitor/var
+ExecStart=/home/pi/line-monitor/.venv/bin/python -m speedmon.cli verify
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/line-monitor/var
+IPAddressDeny=any
+Nice=10
+IOSchedulingClass=idle
