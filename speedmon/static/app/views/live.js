@@ -105,9 +105,10 @@ export async function mount(root, params) {
     if (a?.state === 'testing') {
       row('Now', h('span', { class: 'pill' }, h('i', { class: 'dot live' }), `${a.kind || 'test'} · ${a.phase || ''}`), `${a.engine_name || ''} · started ${ago(a.started_ms)}`);
     } else {
-      const next = a ? Math.min(a.next_test_ms ?? Infinity, a.next_scheduled_ms ?? Infinity) : null;
-      row('Next test', h('span', { class: 'countdown', text: a?.paused ? 'paused' : (Number.isFinite(next) ? countdown(next - Date.now()) : '—') }),
-        a ? `${a.next_kind === 'scheduled' || !a.next_kind ? 'scheduled' : a.next_kind} · every ${a.interval_min} min · ${a.mode} mode` : 'monitor not seen yet');
+      const next = nextTest(a);
+      const capped = a?.next_kind === 'cap';
+      row('Next test', h('span', { class: 'countdown', text: a?.paused ? 'paused' : capped ? 'tomorrow' : (Number.isFinite(next) ? countdown(next - Date.now()) : '—') }),
+        a ? `${capped ? 'daily limit reached' : !a.next_kind || WAITS.has(a.next_kind) ? 'scheduled' : a.next_kind} · every ${a.interval_min} min · ${a.mode} mode` : 'monitor not seen yet');
     }
     const ln = a?.link || {};
     // The Pi's own cable to the router (negotiated link speed), easily mistaken for the broadband speed.
@@ -389,6 +390,16 @@ export async function mount(root, params) {
   await refresh();
   refreshFixed();
   return { destroy() { cleanups.forEach(f => f()); } };
+}
+
+// Waits that aren't a test: the 90 s gap after any test, a pause, the daily cap. Their end isn't when the next test runs.
+const WAITS = new Set(['spacing', 'paused', 'cap']);
+
+function nextTest(a) {
+  if (!a) return null;
+  const sched = a.next_scheduled_ms ?? Infinity;
+  if (WAITS.has(a.next_kind)) return a.next_kind === 'spacing' ? Math.max(a.next_test_ms ?? 0, sched) : sched;
+  return Math.min(a.next_test_ms ?? Infinity, sched);
 }
 
 export function shortName(name) {

@@ -157,3 +157,14 @@ def test_status_writer_runs_with_the_app(settings, tmp_path):
             _t.sleep(0.05)
         doc = json.loads(settings.status_file.read_text())
     assert doc["schema"] == 1 and doc["health"] == "unknown" and doc["last"] is None
+
+
+def test_status_next_test_ignores_waits_that_are_not_tests():
+    from speedmon import timeutil
+    from speedmon import statusfile
+    now = timeutil.now_ms()
+    live = lambda **a: {"health": "ok", "agent": {"state": "idle", "next_scheduled_ms": now + 240_000, **a}}
+    nxt = lambda **a: statusfile.build(live(**a), None, now, "https://example.com/speedtest/")["agent"]["next_test_ms"]
+    assert nxt(next_kind="spacing", next_test_ms=now + 60_000) == now + 240_000   # the 90 s gap after a test isn't a test
+    assert nxt(next_kind="confirmation", next_test_ms=now + 60_000) == now + 60_000
+    assert nxt(next_kind="cap", next_test_ms=now + 60_000) is None

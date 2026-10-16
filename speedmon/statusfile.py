@@ -51,7 +51,15 @@ def build(live: dict, guarantee: dict | None, now_ms: int, url: str) -> dict:
     """Whitelist the live view (web.live_payload) plus the guarantee watch into the status document."""
     pk = live.get("package") or {}
     a = live.get("agent") or {}
-    nexts = [v for v in (a.get("next_test_ms"), a.get("next_scheduled_ms")) if isinstance(v, (int, float))]
+    # The agent's "until" is when its current wait ends. For the gap after a test, a pause or the daily cap that
+    # isn't a test, so only the scheduled time counts then (and nothing at all once the day's cap is reached).
+    kind, until, sched = a.get("next_kind"), a.get("next_test_ms"), a.get("next_scheduled_ms")
+    if kind == "cap":
+        nexts = []
+    elif kind in ("spacing", "paused"):
+        nexts = [max(v for v in (until, sched) if isinstance(v, (int, float)))] if isinstance(sched, (int, float)) else []
+    else:
+        nexts = [v for v in (until, sched) if isinstance(v, (int, float))]
     avg = live.get("averages") or {}
     g = guarantee or {}
     cur = g.get("current") or {}
