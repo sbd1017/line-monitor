@@ -2,6 +2,14 @@
 
 What changed in each release of Line Monitor, newest first.
 
+## v1.2.0 - 2026-10-17
+
+- Integrity moved to the bottom of Evidence (its own tab is gone; old links go there)
+- Explorer colours upload against the package's upload thresholds, and pings above the latency threshold
+- The legacy-data options hide when nothing was imported
+- Compare: one choice of what to compare (week, month, before/after a date, custom) with only its own options showing, the dates in words, and plain-English verdicts that say why when there isn't enough data
+- Live: the Connection DNA chart no longer fails when its card is very small
+
 ## v1.1.0 - 2026-10-17
 
 - Live: the next-test countdown no longer counts down to the short pause after a test, a pause or the daily limit
