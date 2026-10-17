@@ -56,7 +56,7 @@ export async function mount(root) {
     else if (f.kind === 'choice') { el = h('select', {}, ...f.choices.map(c => h('option', { value: c, text: c }))); el.value = v; }
     else if (f.kind === 'tiers' || f.kind === 'servers') { el = h('input', { type: 'text', value: (v || []).join(', ') }); }
     else if (f.kind === 'datetime') { el = h('input', { type: 'datetime-local' }); if (v) { const p = localParts(Date.parse(v)); el.value = `${p.date}T${String(p.h).padStart(2, '0')}:${String(p.min).padStart(2, '0')}`; } }
-    else { el = h('input', { type: f.kind === 'str' ? 'text' : 'number', value: v ?? '', step: f.kind === 'int' ? '1' : 'any', min: f.lo ?? null, max: f.hi ?? null }); }
+    else { el = h('input', { type: f.kind === 'str' ? 'text' : 'number', value: v ?? '', step: f.kind === 'int' ? '1' : 'any', min: f.lo ?? null, max: f.hi ?? null, placeholder: f.nullable && f.kind !== 'str' ? 'automatic' : null }); }
     el.addEventListener('input', estimate);
     el.addEventListener('change', estimate);
     return el;

@@ -15,8 +15,8 @@ What it cannot see: traffic from other devices in the house (that needs the rout
 from __future__ import annotations
 
 LINK_EFFICIENCY = 0.94        # best TCP throughput on an Ethernet link, as a share of its negotiated speed
-BUSY_MBPS = 20.0              # other traffic on the Pi above this (or BUSY_SHARE of the result, if larger) ...
-BUSY_SHARE = 0.05             # ... could have taken bandwidth from the test
+BUSY_SHARE = 0.05             # other traffic on the Pi above 5% of the package's advertised download ...
+BUSY_MIN = 5.0                # ... (and at least 5 Mbps) could have taken bandwidth from the test
 LOAD_LIMIT = 3.0              # 1-minute load average; the Pi 5 has 4 cores
 TEMP_LIMIT = 80.0             # °C; the Pi 5 starts throttling at 85
 ERROR_LIMIT = 50              # Ethernet errors or drops during the test
@@ -50,6 +50,12 @@ def sql_columns(m: str = "m", d: str = "d") -> tuple:
 SQL_COLUMNS = sql_columns()
 
 
+def busy_limit(pk: dict | None) -> float:
+    """Other traffic on the Pi (Mbps) above which a test is 'Pi busy'. Relative to the package, because the same stream
+    is a big share of a 132 Mbps line and a sliver of a gigabit one. The agent waits for a lull below the same figure."""
+    return max(BUSY_MIN, BUSY_SHARE * pk["advertised_down"]) if pk and pk.get("advertised_down") else 20.0
+
+
 def ceiling(link_mbps: float | None) -> float | None:
     return link_mbps * LINK_EFFICIENCY if link_mbps else None
 
@@ -76,7 +82,7 @@ def assess(ok: bool, source: str, kind: str, dl: float | None, pk: dict | None, 
         m_link, d_link, _, bg_rx, bg_tx, pre_rx, pre_tx, load1, temp, thr, rxe, txe, rxd, txd = diag
         link = m_link or d_link
         other = max(v or 0 for v in (bg_rx, bg_tx, pre_rx, pre_tx))
-        if other > max(BUSY_MBPS, BUSY_SHARE * (dl or 0)):
+        if other > busy_limit(pk):
             out.add("pi_busy")
         if (load1 or 0) > LOAD_LIMIT or (temp or 0) >= TEMP_LIMIT or _throttled_now(thr):
             out.add("pi_strained")

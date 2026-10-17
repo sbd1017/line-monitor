@@ -14,8 +14,10 @@ def test_clean_and_each_flag():
     a = lambda dl=135.0, pk=M125, d=None, kind="scheduled", ok=True, source="agent": quality.assess(ok, source, kind, dl, pk, d if d is not None else diag())
     assert a() == () and quality.is_clean(a())
     assert a(d=diag(pre=141.0)) == ("pi_busy",)                         # the real case: a download running on the Pi
-    assert a(d=diag(bg=15.0)) == ()                                      # small background traffic is fine
-    assert a(dl=850.0, pk=GIG1, d=diag(bg=40.0)) == ()                   # ... and scales with the result (5% of 850 = 42.5)
+    assert a(d=diag(bg=5.0)) == () and a(d=diag(bg=8.0)) == ("pi_busy",)   # M125: 5% of 132 = 6.6 Mbps
+    assert a(d=diag(pre=18.1)) == ("pi_busy",)                           # 17 Oct 16:05: a football stream before the test
+    assert a(dl=850.0, pk=GIG1, d=diag(bg=40.0)) == ()                   # Gig1: 5% of 1,130 = 56.5, a stream barely matters
+    assert quality.busy_limit({"advertised_down": 50.0}) == 5.0          # never below 5 Mbps
     assert a(d=diag(load=3.5)) == ("pi_strained",) and a(d=diag(temp=81)) == ("pi_strained",)
     assert a(d=diag(thr="0x50000")) == () and a(d=diag(thr="0x4")) == ("pi_strained",)   # history bits only vs throttled now
     assert a(d=diag(err=2)) == ("link_errors",) and a(d=diag(drop=3)) == ()
@@ -83,3 +85,14 @@ def test_explorer_filter_and_detail_show_quality(signed_in):
     assert det["assessed"] and not det["clean"] and det["labels"][0]["code"] == "pi_busy" and det["capacity"]["level"] == "advertised"   # Gig1 (the default) on 1 Gb/s
     live = c.get("/speedtest/api/live").json()
     assert live["capacity"]["level"] in ("ok", "advertised") and "quality" in live["last"]
+
+
+def test_agent_gets_an_automatic_lull_threshold():
+    from speedmon import settings_store
+    s = {k: 0 for k in settings_store.AGENT_KEYS}
+    s.update(quiet_threshold_mbps=None, package={"advertised_down": 132.0})
+    assert abs(settings_store.agent_config(s)["quiet_threshold_mbps"] - 6.6) < 1e-9
+    s.update(package={"advertised_down": 1130.0})
+    assert settings_store.agent_config(s)["quiet_threshold_mbps"] == 56.5
+    s.update(quiet_threshold_mbps=25.0)                                  # a fixed value in Settings wins
+    assert settings_store.agent_config(s)["quiet_threshold_mbps"] == 25.0

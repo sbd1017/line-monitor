@@ -174,8 +174,8 @@ def methodology(s: dict, packages: list | None = None, legacy: bool = False) -> 
          "reachability and public-IP changes, so a slow result can be checked against problems on the Pi side. "
          "Traffic from other devices in the home is not visible to the Pi."),
         ("Measurement quality", "Each successful test is checked against those diagnostics and is CLEAN unless something on "
-         f"the monitor's side could have held it down: other traffic on the Pi above {quality.BUSY_MBPS:g} Mbps (or "
-         f"{quality.BUSY_SHARE:.0%} of the result, if larger) during or just before the test ('Pi busy'); a load average "
+         f"the monitor's side could have held it down: other traffic on the Pi above {quality.BUSY_SHARE:.0%} of the package's "
+         f"advertised download (at least {quality.BUSY_MIN:g} Mbps) during or just before the test ('Pi busy'); a load average "
          f"above {quality.LOAD_LIMIT:g}, a temperature of {quality.TEMP_LIMIT:g} °C or more, or firmware throttling at the "
          "time ('Pi under load'); Ethernet errors, or more than "
          f"{quality.ERROR_LIMIT} dropped packets ('Ethernet errors'); a link too slow for the package's target ('Monitor "

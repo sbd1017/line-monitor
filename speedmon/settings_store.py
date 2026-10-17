@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from . import timeutil
+from . import quality, timeutil
 
 # Hard floors/ceilings. Not editable from the UI; the agent enforces the same numbers independently.
 HARD = {
@@ -60,8 +60,9 @@ FIELDS: list[Field] = [
           HARD["max_tests_per_day"], danger_below=None),
     Field("paused_until", None, "datetime", "schedule", "Pause full tests until",
           "Probes keep running. Empty = not paused.", nullable=True),
-    Field("quiet_threshold_mbps", 50.0, "float", "schedule", "Postpone a test if the Pi is already moving more than (Mbps)",
-          "Measured on the Pi's own Ethernet port just before a test.", 1, 10000),
+    Field("quiet_threshold_mbps", None, "float", "schedule", "Postpone a test if the Pi is already moving more than (Mbps)",
+          "Measured on the Pi's own Ethernet port just before a test. Empty = automatic: 5% of the package's advertised "
+          "download (at least 5 Mbps), the same line the 'Pi busy' label uses.", 1, 10000, nullable=True),
     Field("quiet_max_defer", 3, "int", "schedule", "Postpone at most (times, 30 s apart)", "", 0, 10),
     # probes
     Field("probe_interval_s", 60, "int", "probes", "Connectivity probe every (seconds)",
@@ -333,7 +334,10 @@ def set_internal(conn, key: str, value) -> None:
 
 
 def agent_config(s: dict) -> dict:
-    return {k: s[k] for k in AGENT_KEYS}
+    out = {k: s[k] for k in AGENT_KEYS}
+    if out.get("quiet_threshold_mbps") is None:                # automatic, from the package in force now
+        out["quiet_threshold_mbps"] = quality.busy_limit(s.get("package"))
+    return out
 
 
 def describe() -> list[dict]:
