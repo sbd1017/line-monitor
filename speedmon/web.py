@@ -536,7 +536,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 a1, b1, la = rng(conn, request, "a_")
                 a2, b2, lb = rng(conn, request, "b_")
                 key = ("compare", rkey(request, "a_"), rkey(request, "b_"), data_version(conn))
-                return cached(key, lambda: {"a_range": {"from_ms": a1, "to_ms": b1, "label": la},
+                first = analytics.data_bounds(conn, s)["first_ms"]
+                return cached(key, lambda: {"a_range": {"from_ms": a1, "to_ms": b1, "label": la}, "data_from_ms": first,
                                             "b_range": {"from_ms": a2, "to_ms": b2, "label": lb},
                                             **analytics.compare(analytics.load_tests(conn, a1, b1, s),
                                                                 analytics.load_tests(conn, a2, b2, s), s)})

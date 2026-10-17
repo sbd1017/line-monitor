@@ -487,6 +487,7 @@ export class Timeline {
 // ---------------------------------------------------------------- Connection DNA
 
 export function dnaGlyph(canvas, d, st, size = 280) {
+  size = Math.max(size || 280, 60);                // a hidden or tiny card must not give a negative radius
   const ctx = hidpi(canvas, size, size);
   const c = size / 2, R0 = size * 0.14, R1 = size * 0.46;
   const sp = d.spokes;

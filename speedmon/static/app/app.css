@@ -401,3 +401,10 @@ label.field { align-content: start; }
 /* Integrity, shown live under the Evidence report (the report has its own printed Integrity section). */
 .evidence-integrity { max-width: 1080px; margin: 0 auto 40px; scroll-margin-top: 150px; }
 @media print { .evidence-integrity { display: none !important; } }
+
+/* Compare: one choice of what to compare; its own options beside it; the chosen dates in words underneath. */
+.cmp-bar { align-items: center; }
+.cmp-opts { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.field.inline { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; font-size: 13px; color: var(--mute); }
+.cmp-summary { margin: 14px 0 0; font-size: 14px; color: var(--ink-2); }
+.cmp-summary b { font: 700 12px var(--mono); color: var(--ink); margin-right: 2px; }

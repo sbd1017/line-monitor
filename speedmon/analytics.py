@@ -828,19 +828,18 @@ def compare(a_all: list[T], b_all: list[T], s: dict) -> dict:
             "hourly_a": hourly(a, s), "hourly_b": hourly(b, s),
             "hist_a": histogram(da, bin_width(s["advertised_down"]), s["advertised_down"]),
             "hist_b": histogram(db, bin_width(s["advertised_down"]), s["advertised_down"]),
-            "verdict": _verdict(test, da, db)}
+            "verdict": _verdict(test, da, db), "enough": len(da) >= 10 and len(db) >= 10}
 
 
 def _verdict(test, da, db) -> str:
     if len(da) < 10 or len(db) < 10:
-        return "Too few successful tests in one of the periods to compare them reliably."
+        s = lambda k: f"{k} successful test{'s' if k != 1 else ''}"
+        return f"Not enough tests to compare yet: period A has {s(len(da))}, period B has {s(len(db))}."
     ma, mb = statistics.median(da), statistics.median(db)
     if test["p"] is None or test["p"] >= 0.05:
-        return (f"No statistically significant difference in download speed (median {ma:.0f} vs {mb:.0f} Mbps, "
-                f"Mann-Whitney p {_fmt_p(test['p'] or 1)}).")
+        return f"No real difference in download speed: typically {ma:.0f} Mbps in A and {mb:.0f} Mbps in B."
     direction = "faster" if mb > ma else "slower"
-    return (f"Period B is {direction}: median {mb:.0f} Mbps against {ma:.0f} Mbps in period A "
-            f"(Mann-Whitney p {_fmt_p(test['p'])}).")
+    return f"Period B is {direction}: typically {mb:.0f} Mbps, against {ma:.0f} Mbps in period A."
 
 
 # ---------------------------------------------------------------- coverage

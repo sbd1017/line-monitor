@@ -274,7 +274,7 @@ export async function mount(root, params) {
       const cardEl = h('div', { class: 'dna', tabindex: '0', role: 'button' }, cv, h('div', { class: 't', text: label }),
         h('div', { class: 's', text: d.summary.n_ok ? `${pct(d.summary.pct_target, 0)} on target · ${n(d.summary.n_ok)} tests` : 'no tests yet' }));
       dnaRow.append(cardEl);
-      requestAnimationFrame(() => dnaGlyph(cv, d, st, Math.min(300, cardEl.clientWidth - 20 || 280)));
+      requestAnimationFrame(() => dnaGlyph(cv, d, st, Math.max(120, Math.min(300, (cardEl.clientWidth || 300) - 20))));
       cardEl.addEventListener('click', () => dnaDetail(label, d));
     }
   }

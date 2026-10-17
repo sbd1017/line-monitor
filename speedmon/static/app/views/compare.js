@@ -3,20 +3,19 @@ import { api, qs, state, h, clear, section, seg, n, pct, css, localParts } from 
 import { lineChart, histogram } from '../viz.js';
 
 function iso(d) { return d.toISOString().slice(0, 10); }
+const DAY = 86400e3;
+function today() { const p = localParts(Date.now()); return new Date(Date.UTC(p.y, p.m - 1, p.d)); }
 function presets() {
-  const now = new Date(); const p = localParts(Date.now());
-  const today = new Date(Date.UTC(p.y, p.m - 1, p.d));
-  const dow = (today.getUTCDay() + 6) % 7;
-  const monThis = new Date(today - dow * 86400e3);
-  const monLast = new Date(monThis - 7 * 86400e3);
+  const p = localParts(Date.now()), t = today();
+  const monThis = new Date(t - ((t.getUTCDay() + 6) % 7) * DAY), monLast = new Date(monThis - 7 * DAY);
   const firstThis = new Date(Date.UTC(p.y, p.m - 1, 1)), firstLast = new Date(Date.UTC(p.y, p.m - 2, 1));
-  const lastOfLast = new Date(firstThis - 86400e3), lastOfPrev = new Date(firstLast - 86400e3), firstPrev = new Date(Date.UTC(p.y, p.m - 3, 1));
   return {
-    week: [[iso(monLast), iso(new Date(monThis - 86400e3))], [iso(monThis), iso(today)], 'Last week vs this week'],
-    month: [[iso(firstPrev), iso(lastOfPrev)], [iso(firstLast), iso(lastOfLast)], 'Month before last vs last month'],
-    thismonth: [[iso(firstLast), iso(lastOfLast)], [iso(firstThis), iso(today)], 'Last month vs this month'],
+    week: [[iso(monLast), iso(new Date(monThis - DAY))], [iso(monThis), iso(t)]],
+    month: [[iso(firstLast), iso(new Date(firstThis - DAY))], [iso(firstThis), iso(t)]],
   };
 }
+const MODES = [['week', 'This week vs last week'], ['month', 'This month vs last month'], ['change', 'Before / after a date'], ['custom', 'Custom']];
+const nice = (s) => s === iso(today()) ? 'today' : new Date(s + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 export async function mount(root) {
   const st = state.settings;
@@ -24,23 +23,36 @@ export async function mount(root) {
   root.append(page);
   const P = presets();
   const ins = { af: h('input', { type: 'date' }), at: h('input', { type: 'date' }), bf: h('input', { type: 'date' }), bt: h('input', { type: 'date' }) };
-  const pivot = h('input', { type: 'date' });
+  const pivot = h('input', { type: 'date', max: iso(today()) });
+  let mode = 'week', span = 14;
+  const pair = () => [[ins.af.value, ins.at.value], [ins.bf.value, ins.bt.value]];
   const setPair = ([a, b]) => { ins.af.value = a[0]; ins.at.value = a[1]; ins.bf.value = b[0]; ins.bt.value = b[1]; load(); };
+  const fromPivot = () => {
+    if (!pivot.value) { clear(out); summary.textContent = 'Pick the day something changed (a new router, a call to Virgin, an upgrade) to compare the days before it with the days after.'; return; }
+    const d = new Date(pivot.value + 'T00:00:00Z'), end = Math.min(+d + (span - 1) * DAY, +today());
+    setPair([[iso(new Date(d - span * DAY)), iso(new Date(d - DAY))], [pivot.value, iso(new Date(end))]]);
+  };
+  pivot.onchange = fromPivot;
+  const changeBox = h('div', { class: 'cmp-opts' }, h('label', { class: 'field inline' }, 'Changed on', pivot),
+    seg([[7, '7 days'], [14, '14 days'], [30, '30 days']], span, (v) => { span = +v; fromPivot(); }, 'Days either side'), h('span', { class: 'muted', text: 'either side' }));
+  const customBox = h('div', { class: 'cmp-opts' },
+    h('label', { class: 'field inline' }, 'A from', ins.af, 'to', ins.at), h('label', { class: 'field inline' }, 'B from', ins.bf, 'to', ins.bt),
+    h('button', { class: 'btn small primary', text: 'Compare', onclick: load }));
+  const summary = h('p', { class: 'cmp-summary' });
   const out = h('div', {});
-  page.append(h('div', { class: 'filters' },
-    seg([['week', 'Week vs week'], ['thismonth', 'Month vs month'], ['month', 'Previous months']], 'week', (v) => setPair(P[v]), 'Preset'),
-    h('span', { class: 'lod', text: 'A' }), ins.af, ins.at, h('span', { class: 'lod', text: 'B' }), ins.bf, ins.bt,
-    h('button', { class: 'btn small', text: 'Compare', onclick: load }),
-    h('span', { class: 'lod', style: { marginLeft: '12px' }, text: 'Before/after' }), pivot,
-    h('button', { class: 'btn small', text: '30 days either side', onclick: () => {
-      if (!pivot.value) return; const d = new Date(pivot.value + 'T12:00:00Z');
-      setPair([[iso(new Date(d - 30 * 86400e3)), iso(new Date(d - 86400e3))], [pivot.value, iso(new Date(+d + 29 * 86400e3))]]);
-    } })), out);
+  const show = () => { changeBox.hidden = mode !== 'change'; customBox.hidden = mode !== 'custom'; };
+  page.append(h('div', { class: 'filters cmp-bar' },
+    seg(MODES, mode, (v) => { mode = v; show(); if (P[v]) setPair(P[v]); else if (v === 'change') fromPivot(); }, 'What to compare'),
+    changeBox, customBox), summary, out);
+  show();
 
   async function load() {
-    if (!(ins.af.value && ins.at.value && ins.bf.value && ins.bt.value)) return;
+    const [a, b] = pair();
+    if (!(a[0] && a[1] && b[0] && b[1])) return;
+    summary.textContent = '';
+    summary.append(h('b', { text: 'A' }), ` ${nice(a[0])} to ${nice(a[1])}`, h('span', { class: 'muted', text: '  compared with  ' }), h('b', { text: 'B' }), ` ${nice(b[0])} to ${nice(b[1])}`);
     out.style.opacity = .5;
-    const r = await api('/compare?' + qs({ a_range: 'custom', a_from: ins.af.value, a_to: ins.at.value, b_range: 'custom', b_from: ins.bf.value, b_to: ins.bt.value }));
+    const r = await api('/compare?' + qs({ a_range: 'custom', a_from: a[0], a_to: a[1], b_range: 'custom', b_from: b[0], b_to: b[1] }));
     out.style.opacity = 1;
     render(r);
   }
@@ -57,7 +69,7 @@ export async function mount(root) {
     };
     const m = (v) => v == null ? '—' : n(v, 1);
     const p = (v) => v == null ? '—' : pct(v);
-    const table = h('table', { class: 'data' }, h('thead', {}, h('tr', {}, h('th', { text: '' }), h('th', { class: 'r', text: `A · ${r.a_range.label}` }), h('th', { class: 'r', text: `B · ${r.b_range.label}` }), h('th', { class: 'r', text: 'B − A' }))),
+    const table = h('table', { class: 'data' }, h('thead', {}, h('tr', {}, h('th', { text: '' }), h('th', { class: 'r', text: 'A' }), h('th', { class: 'r', text: 'B' }), h('th', { class: 'r', text: 'B − A' }))),
       h('tbody', {},
         row('Scheduled tests', x => x.n, x => x.n, v => v == null ? '—' : n(v), 'none'),
         row('Median download (Mbps)', x => x.download.median, x => x.download.median, m),
@@ -71,8 +83,17 @@ export async function mount(root) {
         row('Median ping (ms)', x => x.ping.median, x => x.ping.median, m, 'down'),
         row('Median jitter (ms)', x => x.jitter.median, x => x.jitter.median, (v) => v == null ? '—' : n(v, 2), 'down')));
     const t = r.download_test;
-    out.append(section('01', 'Verdict', '', h('div', { class: 'finding' + (t.p != null && t.p < 0.05 ? '' : ' none') }, h('div', { class: 'h', text: r.verdict }),
-      h('div', { class: 'd', text: `Hodges–Lehmann shift (B − A): ${r.shift_mbps == null ? '—' : n(r.shift_mbps, 1) + ' Mbps'} · Mann–Whitney p ${t.p == null ? '—' : t.p < 1e-6 ? '< 0.000001' : n(t.p, 4)} · uses scheduled tests only.` })),
+    const sig = t.p != null && t.p < 0.05;
+    let detail;
+    if (!r.enough) {
+      const before = r.data_from_ms && r.a_range.from_ms < r.data_from_ms;
+      detail = before ? `Records start on ${new Date(r.data_from_ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}, so period A is mostly or entirely before them. Pick dates after that, or check back when each period has a few days of tests.`
+        : 'Each period needs at least 10 successful scheduled tests. Check back later, or pick longer periods.';
+    } else {
+      detail = `Typical difference, B against A: ${r.shift_mbps == null ? '—' : (r.shift_mbps > 0 ? '+' : '') + n(r.shift_mbps, 1) + ' Mbps'} · ${sig ? 'a real difference, not just day-to-day variation' : 'within normal day-to-day variation'} · scheduled tests only`;
+    }
+    out.append(section('01', 'Verdict', '', h('div', { class: 'finding' + (r.enough && sig ? '' : ' none') }, h('div', { class: 'h', text: r.verdict }),
+      h('div', { class: 'd', text: detail, title: r.enough ? `Hodges–Lehmann shift; Mann–Whitney p ${t.p == null ? '—' : t.p < 1e-6 ? '< 0.000001' : n(t.p, 4)}` : null })),
       h('div', { class: 'table-wrap', style: { marginTop: '18px' } }, table)));
     const hourBox = h('div', {});
     out.append(section('02', 'Hour-of-day profile', 'median download by local hour', h('div', { class: 'legend' }, h('span', {}, h('i', { style: { background: css('--dl') } }), 'A'), h('span', {}, h('i', { style: { background: css('--ul') } }), 'B')), hourBox));
