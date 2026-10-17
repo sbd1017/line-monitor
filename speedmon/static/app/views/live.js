@@ -140,7 +140,8 @@ export async function mount(root, params) {
     h('button', { class: 'btn small', text: 'Apply', onclick: () => { if (fromIn.value && toIn.value) { custom = [fromIn.value, toIn.value]; rangeSeg.set(null); refresh(); } } }));
   const legacyBox = h('input', { type: 'checkbox' });
   legacyBox.checked = !!st.include_legacy;
-  filters.append(h('label', { class: 'check', style: { marginLeft: 'auto' } }, legacyBox, 'show legacy speedtest-cli data on charts'));
+  const hasLegacy = !!state.boot?.bounds?.legacy_tests;            // nothing imported: no toggle, no legend key
+  if (hasLegacy) filters.append(h('label', { class: 'check', style: { marginLeft: 'auto' } }, legacyBox, 'show legacy speedtest-cli data on charts'));
   legacyBox.addEventListener('change', () => chart.load());
   page.append(filters);
   const rq = () => custom ? { range: 'custom', from: custom[0], to: custom[1] } : { range: preset };
@@ -157,7 +158,7 @@ export async function mount(root, params) {
     h('span', {}, h('i', { class: 'box', style: { background: css('--crit') } }), 'failed test'),
     h('span', {}, h('i', { class: 'dot', style: { boxShadow: `0 0 0 1.5px ${css('--warn')}` } }), 'anomaly'),
     h('span', {}, h('i', { style: { background: css('--glow') } }), 'your annotation'),
-    h('span', {}, h('i', { style: { background: css('--faint') } }), 'legacy speedtest-cli (when shown)'));
+    hasLegacy ? h('span', {}, h('i', { style: { background: css('--faint') } }), 'legacy speedtest-cli (when shown)') : null);
   const chart = new TimeChart(chartBox, {
     label: 'Download and upload speed over time',
     panes: [speedPane('dl', 'Download (Mbps)', '--dl', st, 240), speedPane('ul', 'Upload (Mbps)', '--ul', st, 110)],

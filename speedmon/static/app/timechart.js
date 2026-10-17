@@ -80,7 +80,7 @@ export class TimeChart {
     this.bind();
   }
 
-  destroy() { this.stopObs(); clearTimeout(this.t); }
+  destroy() { this.stopObs(); clearTimeout(this.loadTimer); }
 
   setRange(a, b, refetch = true) {
     const span = Math.max(MIN_SPAN, b - a);
@@ -91,7 +91,7 @@ export class TimeChart {
     if (A < lo && B - A < hi - lo) { A = lo; B = A + span; }
     this.range = [Math.round(A), Math.round(B)];
     this.draw();
-    if (refetch) { clearTimeout(this.t); this.t = setTimeout(() => this.load(), 160); }
+    if (refetch) { clearTimeout(this.loadTimer); this.loadTimer = setTimeout(() => this.load(), 160); }   // not this.t: that's the x→time method
     this.o.onRange?.(this.range);
   }
 
