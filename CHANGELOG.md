@@ -2,6 +2,11 @@
 
 What changed in each release of Line Monitor, newest first.
 
+## v1.3.0 - 2026-10-17
+
+- Charts: hovering a point shows its pop-up again, and scroll or double-click zoom work after the first load (a timer had overwritten the chart's position-to-time function)
+- Live: the legacy-data checkbox and legend key only appear when something was imported
+
 ## v1.2.0 - 2026-10-17
 
 - Integrity moved to the bottom of Evidence (its own tab is gone; old links go there)
