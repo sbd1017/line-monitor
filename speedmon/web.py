@@ -629,6 +629,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "SELECT server_id, server_name, server_location, count(*) AS n FROM measurements WHERE server_id IS NOT "
                     "NULL GROUP BY server_id ORDER BY n DESC LIMIT 60")]
                 pkc = settings_store.PackageClock(S(conn)["packages"], S(conn)["timezone"])
+                lat_poor = S(conn)["latency_degraded_ms"]
                 items = []
                 for r in rows:
                     d = dict(r)
@@ -637,6 +638,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         v = d["download_mbps"]
                         d["band"] = ("target" if v >= pk["target_down"] else "severe" if v < pk["severe_down"]
                                      else "degraded" if v < pk["degraded_down"] else "below")
+                        u = d["upload_mbps"]
+                        if u is not None and pk.get("target_up"):
+                            d["band_up"] = ("target" if u >= pk["target_up"]
+                                            else "degraded" if u < (pk.get("degraded_up") or 0) else "below")
+                    if d.get("ping_ms") is not None and d["ping_ms"] > lat_poor:
+                        d["ping_high"] = True
                     items.append(d)
                 return {"total": total, "offset": offset, "size": size, "items": items, "servers": servers}
         except ValueError as exc:

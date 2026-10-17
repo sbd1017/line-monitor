@@ -168,3 +168,13 @@ def test_status_next_test_ignores_waits_that_are_not_tests():
     assert nxt(next_kind="spacing", next_test_ms=now + 60_000) == now + 240_000   # the 90 s gap after a test isn't a test
     assert nxt(next_kind="confirmation", next_test_ms=now + 60_000) == now + 60_000
     assert nxt(next_kind="cap", next_test_ms=now + 60_000) is None
+
+
+def test_explorer_colours_upload_and_high_ping(signed_in):
+    c = signed_in
+    good, raw1 = measurement(seq=1, dl=950.0)
+    poor, raw2 = measurement(seq=2, dl=950.0, upload_mbps=40.0, ping_ms=80.0, t_ms=good["t_ms"] - 60_000)
+    assert signed(c, "POST", "/speedtest/agent/v1/records", {"items": [item("measurement", good, raw1), item("measurement", poor, raw2)]}).status_code == 200
+    items = {m["uuid"]: m for m in c.get("/speedtest/api/measurements?range=all").json()["items"]}
+    assert items[good["uuid"]]["band_up"] == "target" and not items[good["uuid"]].get("ping_high")
+    assert items[poor["uuid"]]["band_up"] == "degraded" and items[poor["uuid"]]["ping_high"]

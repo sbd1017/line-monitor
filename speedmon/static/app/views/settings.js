@@ -77,6 +77,7 @@ export async function mount(root) {
     for (const [g, title] of GROUPS) {
       const grid = h('div', { class: 'form-grid' });
       for (const f of r.fields.filter(x => x.group === g)) {
+        if (f.key === 'include_legacy' && !state.boot?.bounds?.legacy_tests) continue;   // nothing imported
         const el = control(f, r.settings[f.key]);
         inputs[f.key] = el;
         const lab = f.kind === 'packages'

@@ -4,8 +4,13 @@ import { api, h, clear, section, n, toast } from '../util.js';
 export async function mount(root) {
   const page = h('div', { class: 'page' });
   root.append(page);
+  return mountInto(page);
+}
+
+// Also used at the bottom of the Evidence page.
+export async function mountInto(container) {
   const body = h('div', {});
-  page.append(body);
+  container.append(body);
   let timer = 0;
   async function load() {
     clearTimeout(timer);
@@ -40,10 +45,9 @@ export async function mount(root) {
     for (const x of r.quarantine) qt.append(h('div', { class: 'item', style: { cursor: 'default' } }, h('span', { class: 'mono', text: x.received_at.slice(0, 16) }), h('span', { text: `${x.stream || '?'} ${x.uuid || ''}: ${x.error}` }), h('span', {})));
     body.append(section('03', 'Quarantine', 'submissions that failed validation or hash checks are kept, never dropped', qt));
     const im = h('div', { class: 'list' });
-    if (!r.imports.length) im.append(h('p', { class: 'muted', text: 'No imports.' }));
     for (const x of r.imports) im.append(h('div', { class: 'item', style: { cursor: 'default' } }, h('span', { class: 'mono', text: x.started_at.slice(0, 16) }),
       h('span', {}, h('b', { text: x.file_name }), ` · ${x.format} · ${n(x.rows_read)} read, ${n(x.inserted)} imported, ${n(x.duplicates)} duplicates, ${n(x.repaired)} repaired, ${n(x.rejected)} rejected`, h('div', { class: 'hash', text: 'SHA-256 ' + x.file_sha256 })), h('span', {})));
-    body.append(section('04', 'Imported history', 'legacy files are read, never modified; each import is fingerprinted', im));
+    if (r.imports.length) body.append(section('04', 'Imported history', 'legacy files are read, never modified; each import is fingerprinted', im));
     const ex = h('div', { class: 'list' });
     if (!r.exports.length) ex.append(h('p', { class: 'muted', text: 'No exports yet.' }));
     for (const x of r.exports) ex.append(h('div', { class: 'item', style: { cursor: 'default' } }, h('span', { class: 'mono', text: x.created_at.slice(0, 16) }),

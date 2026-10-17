@@ -52,9 +52,10 @@ export async function mount(root, params) {
     for (const m of r.items) {
       const ok = m.status === 'ok';
       const band = ok && m.band ? `b-${m.band}` : '';
+      const bandUp = ok && m.band_up ? `b-${m.band_up}` : '';
       tbody.append(h('tr', { tabindex: '0', onclick: () => openTest(m.uuid), onkeydown: (e) => { if (e.key === 'Enter') openTest(m.uuid); } },
-        h('td', { class: 'mono', text: fmtDTs(m.t_ms) }), h('td', { class: 'r ' + band, text: ok ? n(m.download_mbps, 1) : '—' }), h('td', { class: 'r', text: ok ? n(m.upload_mbps, 1) : '—' }),
-        h('td', { class: 'r', text: n(m.ping_ms, 1) }), h('td', { class: 'r', text: n(m.jitter_ms, 2) }), h('td', { class: 'r', text: m.packet_loss_pct == null ? '—' : n(m.packet_loss_pct, 1) }),
+        h('td', { class: 'mono', text: fmtDTs(m.t_ms) }), h('td', { class: 'r ' + band, text: ok ? n(m.download_mbps, 1) : '—' }), h('td', { class: 'r ' + bandUp, text: ok ? n(m.upload_mbps, 1) : '—' }),
+        h('td', { class: 'r' + (m.ping_high ? ' b-below' : ''), text: n(m.ping_ms, 1), title: m.ping_high ? 'Above the latency threshold in Settings' : null }), h('td', { class: 'r', text: n(m.jitter_ms, 2) }), h('td', { class: 'r', text: m.packet_loss_pct == null ? '—' : n(m.packet_loss_pct, 1) }),
         h('td', {}, ok ? 'ok' : h('span', { class: 'tag fail', text: m.failure_code })), h('td', {}, h('span', { class: 'tag' + (m.source.startsWith('legacy') ? ' legacy' : ''), text: m.kind })),
         h('td', { text: m.server_name || m.server_id || '—' }),
         h('td', {}, m.anomaly ? h('span', { class: 'tag anom', text: `anomaly z${n(m.anomaly_z, 1)}` }) : null, m.flags ? h('span', { class: 'tag', text: m.flags }) : null)));

@@ -24,6 +24,7 @@ function parse() {
   m = p.match(/^\/test\/([0-9a-f-]{36})$/);
   if (m) return ['explorer', { open: m[1] }];
   const name = p.slice(1).split('/')[0];
+  if (name === 'integrity') return ['evidence', { ...Object.fromEntries(new URLSearchParams(location.search)), focus: 'integrity' }];
   return [VIEWS[name] ? name : 'live', Object.fromEntries(new URLSearchParams(location.search))];
 }
 

@@ -1,3 +1,4 @@
+[hidden] { display: none !important; }
 /* Line Monitor — /speedtest
    Design: a network-operations instrument, not a card grid. Sections are separated by hairline rules and
    numbered mono kickers; panels are used only where something is an instrument (gauge, pulse). Numbers are the
@@ -396,3 +397,7 @@ label.field { align-content: start; }
 .gdays { display: flex; gap: 3px; margin-top: 10px; flex-wrap: wrap; }
 .gdays i { width: 12px; height: 12px; border-radius: 2px; background: color-mix(in srgb, var(--good) 45%, transparent); }
 .gdays i.b { background: var(--crit); }
+
+/* Integrity, shown live under the Evidence report (the report has its own printed Integrity section). */
+.evidence-integrity { max-width: 1080px; margin: 0 auto 40px; scroll-margin-top: 150px; }
+@media print { .evidence-integrity { display: none !important; } }

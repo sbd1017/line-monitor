@@ -1,5 +1,5 @@
 // Evidence: a clean, objective report of a period, readable by a third party without the dashboard. Prints to A4.
-import { api, qs, state, h, clear, seg, n, pct, fmtDT, fmtDate, dur, toast } from '../util.js';
+import { api, qs, state, h, clear, section, seg, n, pct, fmtDT, fmtDate, dur, toast } from '../util.js';
 import { columns, Heatmap, lineChart } from '../viz.js';
 
 const PRESETS = [['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days'], ['this_month', 'This month'], ['last_month', 'Last month'], ['this_year', 'This year'], ['all', 'All']];
@@ -17,8 +17,14 @@ export async function mount(root, params) {
       h('button', { class: 'btn', text: 'Print / save as PDF', onclick: () => window.print() }),
       h('button', { class: 'btn primary', text: 'Download XLSX of this period', onclick: () => exportXlsx() })));
   const paper = h('article', { class: 'paper' });
-  page.append(bar, paper);
+  const integ = h('div', { class: 'evidence-integrity', id: 'integrity' });
+  page.append(bar, paper, integ);
   const cleanups = [];
+  const { mountInto } = await import('./integrity.js');
+  integ.append(section('', 'Integrity', 'proof that the data in this report hasn\'t been changed, and that nothing went missing'));
+  const live = await mountInto(integ);
+  cleanups.push(() => live?.destroy?.());
+  if (params.focus === 'integrity') setTimeout(() => integ.scrollIntoView({ block: 'start' }), 300);
 
   function rq() { return custom ? { range: 'custom', from: custom[0], to: custom[1] } : { range: preset }; }
   async function exportXlsx() {
