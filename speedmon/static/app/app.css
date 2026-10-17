@@ -408,3 +408,32 @@ label.field { align-content: start; }
 .field.inline { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; font-size: 13px; color: var(--mute); }
 .cmp-summary { margin: 14px 0 0; font-size: 14px; color: var(--ink-2); }
 .cmp-summary b { font: 700 12px var(--mono); color: var(--ink); margin-right: 2px; }
+
+/* Section dock (Live): a small floating bar for jumping between the page's major sections. Bottom-centred so it
+   adds nothing to the sticky header and period bar, and never covers a heading after a jump. Full width and
+   swipeable on phones. */
+.secnav { position: fixed; z-index: 40; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  max-width: calc(100vw - 2 * var(--gutter)); border-radius: 12px;
+  background: color-mix(in srgb, var(--page) 76%, transparent); backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  box-shadow: 0 0 0 1px var(--line-2), 0 12px 32px rgba(0, 0, 0, .38); }
+.secnav-track { position: relative; display: flex; gap: 2px; padding: 4px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; border-radius: inherit; }
+.secnav-track::-webkit-scrollbar { display: none; }
+.secnav a { position: relative; z-index: 1; padding: 8px 13px 9px; border-radius: 8px; text-decoration: none; color: var(--mute); font-size: 13px; white-space: nowrap; transition: color .2s; }
+.secnav a:hover { color: var(--ink); }
+.secnav a[aria-current="location"] { color: var(--ink); font-weight: 600; }
+.secnav a:focus-visible { outline: 2px solid var(--glow); outline-offset: -2px; }
+.secnav-ink { position: absolute; left: 0; bottom: 4px; height: 2px; width: 0; border-radius: 2px; background: var(--glow);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--glow) 55%, transparent); transition: transform .28s cubic-bezier(.2, .8, .2, 1), width .28s cubic-bezier(.2, .8, .2, 1); }
+.secnav-ink { transform: translateX(0); margin-left: 13px; }
+.page.has-secnav { padding-bottom: 96px; }
+body.has-secnav .toast { bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
+.secnav-target:focus { outline: none; }
+.secnav-target:focus-visible { outline: 2px solid var(--glow); outline-offset: 6px; border-radius: 8px; }
+@media (max-width: 640px) {
+  .secnav { left: 8px; right: 8px; transform: none; max-width: none; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .secnav a { padding: 10px 13px 11px; }                         /* taller tap targets */
+  .secnav-track { -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 22px), transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 22px), transparent); }   /* there's more to swipe to */
+}
+@media (prefers-reduced-motion: reduce) { .secnav-ink, .secnav a { transition: none; } }
+@media print { .secnav { display: none !important; } .page.has-secnav { padding-bottom: 0; } }

@@ -1,6 +1,7 @@
 // Live: the connection right now, then everything the selected period says about it.
 import { api, qs, state, h, clear, section, seg, n, mbps, pct, ms, fmtDT, fmtTime, fmtDay, ago, dur, countdown, RANGES, rangeMs, css, toast, bandOf, BAND_LABEL } from '../util.js';
 import * as bus from '../bus.js';
+import { sectionNav } from '../sectionnav.js';
 import { TimeChart, speedPane, latencyPane, speedTooltip, latencyTooltip } from '../timechart.js';
 import { Gauge, Pulse, columns, histogram, percentileStrip, Heatmap, calendarView, Timeline, TL_LABEL, dnaGlyph } from '../viz.js';
 import { openTest, openDrawer } from './detail.js';
@@ -390,6 +391,18 @@ export async function mount(root, params) {
 
   await refresh();
   refreshFixed();
+  // ------------------------------------------------------------ section dock
+  const sec = (title) => [...page.querySelectorAll(':scope > .section')].find(s => s.querySelector('h2')?.textContent === title);
+  const groups = [
+    ['live', 'Live', page.querySelector(':scope > .hero')],
+    ['history', 'History', sec('Network pulse')],
+    ['promise', 'Promise', sec('Promise kept')],
+    ['reliability', 'Reliability', sec('Latency')],
+    ['patterns', 'Patterns', sec('When does it slow down?')],
+    ['dna', 'DNA', sec('Connection DNA')],
+  ].filter(g => g[2]).map(([id, label, el]) => ({ id, label, el }));
+  const nav = sectionNav(page, groups);
+  cleanups.push(() => nav.destroy());
   return { destroy() { cleanups.forEach(f => f()); } };
 }
 

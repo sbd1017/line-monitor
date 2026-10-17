@@ -28,7 +28,10 @@ function parse() {
   return [VIEWS[name] ? name : 'live', Object.fromEntries(new URLSearchParams(location.search))];
 }
 
+let routed = null;                                   // path + query of the view on screen
+
 export async function route() {
+  routed = location.pathname + location.search;
   const [name, params] = parse();
   for (const a of document.querySelectorAll('.tabs a')) {
     a.toggleAttribute('aria-current', a.dataset.tab === name || (name === 'day' && a.dataset.tab === 'live'));
@@ -57,7 +60,10 @@ document.addEventListener('click', (e) => {
   e.preventDefault();
   go(href.slice(BASE.length));
 });
-window.addEventListener('popstate', route);
+window.addEventListener('popstate', () => {
+  if (location.pathname + location.search === routed) { dispatchEvent(new Event('sectionnav:hash')); return; }   // only the #section changed
+  route();
+});
 
 async function boot() {
   try {
