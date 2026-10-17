@@ -123,3 +123,35 @@ def test_legacy_import_repairs_flags_and_is_idempotent(db, tmp_path):
         assert integrity.verify(c)["ok"]
         misaka = [r for r in rows if r["server_sponsor"] == "Misaka Network, Inc."]
         assert misaka and misaka[0]["distance_km"] == 1277.5
+
+
+def test_xlsx_has_no_parts_excel_would_repair(db, settings):
+    """Excel refuses some things XlsxWriter writes without complaint (it 'repairs' the file on opening). 17 Oct 2026:
+    a one-day export had an empty frozen pane on Incidents. Check every sheet and chart of a short export."""
+    with db.tx() as c:
+        synthetic.seed(c, days=2, interval_min=30, probes=False)
+    now = timeutil.now_ms()
+    row, path = run_export(db, settings, "xlsx", a=now - 86_400_000, b=now)
+    with zipfile.ZipFile(path) as z:
+        wb = z.read("xl/workbook.xml").decode()
+        names = [html.unescape(x) for x in re.findall(r'<sheet name="([^"]+)"', wb)]
+        for i, name in enumerate(names, 1):
+            x = z.read(f"xl/worksheets/sheet{i}.xml").decode()
+            for pane in re.findall(r"<pane [^>]*/>", x):
+                if 'state="frozen"' in pane:
+                    assert "xSplit=" in pane or "ySplit=" in pane, f"{name}: frozen pane without a split: {pane}"
+            merges = re.findall(r'<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"', x)
+            seen = set()
+            for c1, r1, c2, r2 in merges:
+                cells = {(col, r) for r in range(int(r1), int(r2) + 1) for col in _cols(c1, c2)}
+                assert not (cells & seen), f"{name}: overlapping merged cells"
+                seen |= cells
+        for part in (p for p in z.namelist() if p.startswith("xl/charts/chart")):
+            for ref in re.findall(r"<c:f>([^<]+)</c:f>", z.read(part).decode()):
+                sheet = html.unescape(ref.rsplit("!", 1)[0]).strip("'")
+                assert sheet in names, f"{part}: chart refers to a missing sheet {sheet}"
+
+
+def _cols(a, b):
+    n = lambda s: sum((ord(ch) - 64) * 26 ** i for i, ch in enumerate(reversed(s)))
+    return range(n(a), n(b) + 1)

@@ -656,7 +656,7 @@ def _write_incidents(ws, f, rd, tz):
                 (_local(o["before_ms"], tz), f.dt_plain), (_local(o["after_ms"], tz), f.dt_plain)])
     if not rd["outages"]:
         sh.row([("None in this period.", f.label)])
-    ws.freeze_panes(0, 0)
+    # (no freeze_panes(0, 0): it writes a frozen pane with no split, which Excel "repairs" when opening the file)
 
 
 def _write_annotations(ws, f, conn, rd, tz, a, b):
