@@ -29,6 +29,8 @@ export async function mount(root, params) {
   page.append(h('div', { class: 'hero' }, readout, inst, side));
   const ticker = h('div', { class: 'ticker' });
   page.append(ticker);
+  const capNote = h('p', { class: 'cap-note', hidden: true });     // monitor capacity vs the package (quality.capacity)
+  page.append(capNote);
   if (st.fresh_start_at && Date.parse(st.fresh_start_at) > Date.now()) {
     page.append(h('div', { class: 'trial' }, h('span', { class: 'lod', text: 'Trial period' }),
       `Everything recorded so far is archived and a fresh evidence database starts on ${fmtDT(Date.parse(st.fresh_start_at))}. Change it in Settings → Fresh start.`));
@@ -54,6 +56,9 @@ export async function mount(root, params) {
     const last = d.last;
     const ok = last && last.status === 'ok';
     inst.classList.toggle('testing', testing);
+    const cap = d.capacity;
+    capNote.hidden = !cap || ['ok', 'unknown'].includes(cap.level);
+    if (!capNote.hidden) { capNote.className = 'cap-note' + (cap.level === 'advertised' ? '' : ' bad'); capNote.textContent = cap.text; }
     gauge.pkg = d.package;
     pkgCap.textContent = d.package ? `${shortName(d.package.name)} · advertised ${d.package.advertised_down}/${d.package.advertised_up} Mbps` : '';
     if (testing && a.live_mbps != null && (a.phase === 'download' || a.phase === 'upload')) {
@@ -77,6 +82,7 @@ export async function mount(root, params) {
           `${pct(last.pct_of_advertised, 0)} of the advertised ${last.package.advertised_down} Mbps (${shortName(last.package.name)}) · ${BAND_LABEL[band]}`));
       } else dlMeta.append(h('span', { class: 'vs' }, h('i', { class: 'dot crit' }), `${last.failure_code}: ${last.failure_detail || ''}`));
       dlMeta.append(h('span', { text: `${last.server_name || last.server_sponsor || 'server ?'} · ${last.engine}` }));
+      if (ok && last.quality) dlMeta.append(qualityTags(last.quality, 'clean measurement'));
       if (last.uuid !== lastTestUuid) { lastTestUuid = last.uuid; dlMeta.onclick = () => openTest(last.uuid); dlMeta.style.cursor = 'pointer'; }
     } else dlMeta.append(h('span', { text: 'Waiting for the first test.' }));
     clear(minis);
@@ -306,10 +312,15 @@ export async function mount(root, params) {
     }
     const score = sm.pct_target;
     const verdict = sm.n_ok ? `Of ${n(sm.n)} scheduled tests ${d.range.label.toLowerCase()}, ${pct(score, 1)} reached their package's target (${st.target_down} Mbps on ${st.name}); the typical result was ${n(sm.download.median, 0)} Mbps, ${pct(sm.pct_of_advertised_median, 0)} of the advertised speed.` : 'No successful scheduled tests in this period yet.';
+    const qs_ = sm.quality;
+    const cleanLine = !qs_ || !qs_.n_ok ? null : qs_.n_flagged
+      ? `Setting aside ${n(qs_.n_flagged)} test${qs_.n_flagged > 1 ? 's' : ''} the monitor itself may have affected (${Object.entries(qs_.flags).filter(([c]) => qs_.labels[c]).map(([c, k]) => `${qs_.labels[c]}: ${k}`).join(', ')}): ${pct(qs_.clean.pct_target, 1)} on target.`
+      : `All ${n(qs_.n_ok)} successful tests were clean measurements: nothing on the monitor's side held them down.`;
     promise.append(h('div', {},
       h('div', { class: 'lod', text: 'promise kept' }),
       h('div', { class: 'score' }, score == null ? '—' : n(score, 1), h('small', { text: '%' })),
-      h('p', { class: 'verdict', text: verdict })));
+      h('p', { class: 'verdict', text: verdict }),
+      cleanLine ? h('p', { class: 'note', text: cleanLine }) : null));
     const tiers = h('div', { class: 'tiers' });
     const bar = (label, v, cls, sub) => tiers.append(h('div', { class: 'tier' }, h('span', { class: 't', text: label }),
       h('div', { class: 'bar', title: sub || '' }, h('i', { class: cls || '', style: { width: `${Math.max(0, Math.min(100, v || 0))}%` } })), h('span', { class: 'p', text: v == null ? '—' : pct(v) })));
@@ -328,7 +339,7 @@ export async function mount(root, params) {
     sk.append(h('div', {}, h('div', { class: 'k', text: 'Longest poor run' }), h('div', { class: 'v', text: p ? `${n(p.count)} tests` : 'none' }), h('div', { class: 's', text: p ? `${fmtDT(p.first_ms)} → sampled span ${dur(p.sampled_span_ms)}` : '' })));
     const gu = d.guarantee;
     let gw = null;
-    if (g && gu.applies) {
+    if (gu && gu.applies) {
       const run = gu.current ? gu.current.days : 0;
       const qual = gu.qualifying.length;
       gw = h('div', { class: 'guarantee' + (qual ? ' hit' : run ? ' warn' : '') },
@@ -414,6 +425,14 @@ function nextTest(a) {
   const sched = a.next_scheduled_ms ?? Infinity;
   if (WAITS.has(a.next_kind)) return a.next_kind === 'spacing' ? Math.max(a.next_test_ms ?? 0, sched) : sched;
   return Math.min(a.next_test_ms ?? Infinity, sched);
+}
+
+// Measurement-quality tags for one test ({codes, clean, labels} from the API). Informational labels look quieter.
+export function qualityTags(q, cleanText) {
+  const wrap = h('span', { class: 'qtags' });
+  if (q.clean && !q.labels.some(l => !l.affects_clean)) wrap.append(h('span', { class: 'qtag', text: cleanText || 'clean', title: 'Nothing on the monitor\'s side could have held this result down.' }));
+  for (const l of q.labels) wrap.append(h('span', { class: 'qtag ' + (l.affects_clean ? 'flag' : 'info'), text: l.label, title: l.why }));
+  return wrap;
 }
 
 export function shortName(name) {

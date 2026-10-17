@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import analytics, auth, canonical, ingest, integrity, series, settings_store, statusfile, timeutil
+from . import analytics, auth, canonical, ingest, integrity, quality, series, settings_store, statusfile, timeutil
 from .config import VERSION, Settings, load_settings
 from .db import Database
 from .exports import jobs as export_jobs
@@ -379,6 +379,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             avgs = cached(("averages", mv, now // 60000), averages)
             status = agent_status(conn)
             last_probe = pulse[-1] if pulse else None
+            pkc_live = settings_store.PackageClock(s["packages"], s["timezone"])
+            qlast = quality_codes(conn, [dict(x) for x in (last, last_ok) if x], pkc_live)
         rolling = [r["download_mbps"] for r in recent if r["status"] == "ok"][:5]
         health = "unknown"
         if status and not status["online"]:
@@ -404,9 +406,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 d["band"] = ("target" if v >= pk["target_down"] else "severe" if v < pk["severe_down"]
                              else "degraded" if v < pk["degraded_down"] else "below")
                 d["pct_of_advertised"] = 100 * v / pk["advertised_down"]
+            codes = qlast.get(r["uuid"], ())
+            d["quality"] = {"codes": list(codes), "clean": quality.is_clean(codes), "labels": quality.labels(codes)}
             return d
 
+        link_now = ((status or {}).get("link") or {}).get("speed") or (last["link_speed_mbps"] if last else None)
+
         return {"now_ms": now, "last": judged(last), "package": s["package"],
+                "capacity": quality.capacity(link_now, s["package"]),
                 "last_ok": judged(last_ok),
                 "recent": [dict(r) for r in recent], "rolling5": (sum(rolling) / len(rolling)) if rolling else None,
                 "averages": avgs, "agent": status, "pulse": [list(r) for r in pulse], "health": health}
@@ -599,7 +606,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             args += a2
         elif flt == "flagged":
             where.append("EXISTS (SELECT 1 FROM measurement_flags f WHERE f.measurement_uuid = m.uuid AND f.revoked_at IS NULL)")
+        elif flt in ("clean", "quality_flagged"):                  # measurement quality (speedmon/quality.py)
+            quality.register_sql(conn, settings_store.PackageClock(s["packages"], s["timezone"]))
+            where.append(f"lm_quality(m.status, m.source, m.kind, m.download_mbps, m.t_ms, "
+                         f"{', '.join(quality.sql_columns('m', 'dq'))}) = ?")
+            args.append("clean" if flt == "clean" else "flagged")
         return " AND ".join(where), args
+
+    DQ_JOIN = "LEFT JOIN diagnostics dq ON dq.id = (SELECT id FROM diagnostics WHERE measurement_uuid = m.uuid LIMIT 1) "
+
+    def quality_codes(conn, rows: list[dict], pkc) -> dict:
+        """uuid -> quality codes for a page of measurement rows (one query for the page's diagnostics)."""
+        ids = [r["uuid"] for r in rows]
+        if not ids:
+            return {}
+        diag = {r[0]: tuple(r[1:]) for r in conn.execute(
+            f"SELECT m.uuid, {', '.join(quality.SQL_COLUMNS)} FROM measurements m LEFT JOIN diagnostics d ON "
+            f"d.measurement_uuid = m.uuid WHERE m.uuid IN ({','.join('?' * len(ids))})", ids)}
+        return {r["uuid"]: quality.assess(r["status"] == "ok", r["source"], r["kind"], r["download_mbps"],
+                                          pkc.at(r["t_ms"]), diag.get(r["uuid"])) for r in rows}
 
     @app.get(BASE + "/api/measurements")
     def measurements(request: Request):
@@ -612,6 +637,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 size = max(10, min(int(q.get("size", 100)), 500))
                 offset = max(0, int(q.get("offset", 0)))
                 join = "LEFT JOIN derived_measurement d ON d.uuid = m.uuid " if ("d." in where or "d." in sort) else ""
+                if "dq." in where:
+                    join += DQ_JOIN
                 total = conn.execute(f"SELECT count(*) FROM measurements m {join}WHERE {where}", args).fetchone()[0]
                 # Page over ids first (answered from a covering index), then fetch only the rows shown.
                 cover = {"download": "measurements_dl_cov", "upload": "measurements_ul_cov", "ping": "measurements_ping_cov"}
@@ -631,9 +658,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "NULL GROUP BY server_id ORDER BY n DESC LIMIT 60")]
                 pkc = settings_store.PackageClock(S(conn)["packages"], S(conn)["timezone"])
                 lat_poor = S(conn)["latency_degraded_ms"]
+                qc = quality_codes(conn, [dict(r) for r in rows], pkc)
                 items = []
                 for r in rows:
                     d = dict(r)
+                    d["quality"] = list(qc.get(d["uuid"], ()))
                     if d["status"] == "ok" and d["download_mbps"] is not None:
                         pk = pkc.at(d["t_ms"])
                         v = d["download_mbps"]
@@ -646,7 +675,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     if d.get("ping_ms") is not None and d["ping_ms"] > lat_poor:
                         d["ping_high"] = True
                     items.append(d)
-                return {"total": total, "offset": offset, "size": size, "items": items, "servers": servers}
+                return {"total": total, "offset": offset, "size": size, "items": items, "servers": servers,
+                        "quality_labels": {k: {"label": v[0], "affects_clean": v[1], "why": v[2]} for k, v in quality.FLAGS.items()}}
         except ValueError as exc:
             return err(str(exc))
 
@@ -686,7 +716,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "SELECT uuid, t_ms, kind, status, download_mbps FROM measurements WHERE related_uuid = ? OR uuid = ?",
                 (uid, m.get("related_uuid") or ""))]
             calc = canonical.record_hash("measurement", m)
-            return {"measurement": m, "diagnostics": d, "ledger": dict(ledger) if ledger else None,
+            s = S(conn)
+            pk = settings_store.PackageClock(s["packages"], s["timezone"]).at(m["t_ms"])
+            codes = quality_codes(conn, [m], settings_store.PackageClock(s["packages"], s["timezone"]))[m["uuid"]]
+            qual = {"codes": list(codes), "clean": quality.is_clean(codes), "labels": quality.labels(codes),
+                    "assessed": m["status"] == "ok" and m["source"] in ("agent", "synthetic"),
+                    "capacity": quality.capacity(m.get("link_speed_mbps") or (d or {}).get("link_speed_mbps"), pk)}
+            return {"measurement": m, "diagnostics": d, "quality": qual, "ledger": dict(ledger) if ledger else None,
                     "hash_ok": calc == m["record_hash"], "flags": flags, "derived": dict(derived) if derived else None,
                     "probes": [list(r) for r in near], "related": related}
 

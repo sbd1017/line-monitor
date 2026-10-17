@@ -55,6 +55,8 @@ export async function mount(root, params) {
       h('h1', { text: s.package_name }),
       h('p', { class: 'meta', text: `Period: ${r.range.from_local} to ${r.range.to_local} (${r.range.label}). Generated ${r.generated_local} by ${r.software}.` }),
       h('p', { class: 'meta', text: `Measured by a Raspberry Pi 5 wired by Ethernet to the home router, which is wired to the Virgin Media Hub in modem mode. Full speed tests with the Ookla Speedtest CLI every ${s.interval_min} minutes at a random moment in each slot, light connectivity probes every minute.` }));
+    const cap = r.capacity;
+    if (cap && !['ok', 'unknown'].includes(cap.level)) paper.append(h('p', { class: 'cap-note' + (cap.level === 'advertised' ? '' : ' bad'), text: cap.text }));
     paper.append(sec('Summary',
       h('div', { class: 'answers' },
         ...[['Typical download (median)', `${n(dl.median, 0)} Mbps`, `${pct(sm.pct_of_advertised_median, 0)} of the advertised ${s.advertised_down} Mbps`],
@@ -85,6 +87,19 @@ export async function mount(root, params) {
         [`Below ${s.degraded_down} Mbps (degraded)`, pct(sm.pct_degraded)], [`Below ${s.severe_down} Mbps (severe)`, pct(sm.pct_severe)],
         sm.pct_below_guarantee != null ? ['Below the minimum guarantee', pct(sm.pct_below_guarantee)] : null,
         [`Upload at or above ${s.target_up} Mbps`, pct(sm.up_pct_target)]], ['Share of successful scheduled tests', ''])));
+    const qs_ = sm.quality;
+    if (qs_ && qs_.n_ok) {
+      const cq = qs_.clean, flagged = Object.entries(qs_.flags).sort((a, b) => b[1] - a[1]);
+      paper.append(sec('Measurement quality',
+        h('p', { class: 'meta', text: `${n(qs_.n_clean)} of ${n(qs_.n_ok)} successful scheduled tests were clean: nothing on the monitor's side could have held them down. The figures below set the others aside, to show they don't change the picture.` }),
+        T([['On target', pct(sm.pct_target), pct(cq.pct_target)], [`Degraded (below ${s.degraded_down} Mbps)`, pct(sm.pct_degraded), pct(cq.pct_degraded)],
+          [`Severe (below ${s.severe_down} Mbps)`, pct(sm.pct_severe), pct(cq.pct_severe)],
+          sm.pct_below_guarantee != null ? ['Below the minimum guarantee', pct(sm.pct_below_guarantee), pct(cq.pct_below_guarantee)] : null,
+          ['Median download (Mbps)', n(dl.median, 1), n(cq.download.median, 1)], ['Tests', n(qs_.n_ok), n(qs_.n_clean)]],
+          ['', 'All scheduled tests', 'Clean tests only']),
+        flagged.length ? T(flagged.map(([c, k]) => [qs_.labels[c], n(k)]), ['Label', 'Tests']) : null,
+        h('p', { class: 'meta', text: 'Labels come from the Pi\'s own diagnostics recorded with each test (see Methodology). Traffic from other devices in the home is not part of this check.' })));
+    }
     const dailyBox = h('div', {});
     paper.append(sec('Results over the period', dailyBox, h('p', { class: 'meta', text: 'Daily median and P10 (the speed 90% of that day\'s tests exceeded) of scheduled tests.' })));
     lineChart(dailyBox, [{ name: 'Median download', color: '--dl', points: r.daily.map(d => [d.day, d.median]) },

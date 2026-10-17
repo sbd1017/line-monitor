@@ -25,6 +25,26 @@ export async function openTest(uid) {
   box.append(h('div', { class: 'lod', text: `${m.kind} test · ${m.source}` }),
     h('h2', { style: { fontSize: '30px', margin: '6px 0 2px' }, text: ok ? `${n(m.download_mbps, 1)} / ${n(m.upload_mbps, 1)} Mbps` : `Failed: ${m.failure_code}` }),
     h('p', { class: 'muted', text: `${fmtDTs(m.t_ms)} (${m.tz_name}, UTC${m.utc_offset_min >= 0 ? '+' : ''}${m.utc_offset_min / 60}) · ${m.started_at}` }));
+  const q = d.quality;
+  if (q && q.assessed) {
+    const quiet = q.labels.filter(l => !l.affects_clean), doubt = q.labels.filter(l => l.affects_clean);
+    const num = (v, dp = 1) => (v == null ? '—' : n(v, dp));
+    // the readings behind each label, from the diagnostics recorded with this test
+    const evidence = {
+      pi_busy: g && `Other traffic on the Pi: ${num(Math.max(g.background_rx_mbps || 0, g.pretest_rx_mbps || 0))} Mbps in, ${num(Math.max(g.background_tx_mbps || 0, g.pretest_tx_mbps || 0))} Mbps out (during or just before the test).`,
+      pi_strained: g && `Load average ${num(g.cpu_load1, 2)}, ${num(g.cpu_temp_c)} °C, firmware flags ${g.throttled || '—'}.`,
+      link_errors: g && `Errors ${num(g.rx_errors_delta, 0)} in / ${num(g.tx_errors_delta, 0)} out, drops ${num(g.rx_dropped_delta, 0)} in / ${num(g.tx_dropped_delta, 0)} out.`,
+      link_slow: `Link ${m.link_speed_mbps || '?'} Mb/s.`,
+      at_link_limit: q.capacity?.ceiling_mbps ? `The link carries about ${n(q.capacity.ceiling_mbps, 0)} Mbps at most.` : '',
+    };
+    box.append(...[h('h3', { style: { margin: '20px 0 6px' }, text: 'Measurement quality' }),
+      h('p', { class: doubt.length ? 'cap-note' : 'muted', style: { marginTop: 0 }, text: doubt.length
+        ? `Not clean: something on the monitor's side could have held this result down, so the clean-only figures leave it out.`
+        : 'Clean: nothing on the monitor\'s side could have held this result down.' }),
+      ...[...doubt, ...quiet].map(l => h('p', { style: { margin: '6px 0' } }, h('span', { class: 'qtag ' + (l.affects_clean ? 'flag' : 'info'), text: l.label }), ' ',
+        h('span', { class: 'muted', text: [l.why, evidence[l.code]].filter(Boolean).join(' ') }))),
+      q.capacity && !['ok', 'unknown'].includes(q.capacity.level) ? h('p', { class: 'muted', style: { margin: '6px 0' }, text: q.capacity.text }) : null].filter(Boolean));
+  }
   box.append(h('h3', { style: { margin: '20px 0 6px' }, text: 'Measurement (raw, immutable)' }), kv([
     ['Status', m.status + (m.failure_detail ? ` · ${m.failure_detail}` : '')], ['Download', ok ? `${n(m.download_mbps, 2)} Mbps` : '—'], ['Upload', ok ? `${n(m.upload_mbps, 2)} Mbps` : '—'],
     ['Ping (idle)', m.ping_ms == null ? '—' : `${n(m.ping_ms, 2)} ms (low ${n(m.ping_low_ms, 1)}, high ${n(m.ping_high_ms, 1)})`], ['Jitter', m.jitter_ms == null ? '—' : `${n(m.jitter_ms, 2)} ms`],

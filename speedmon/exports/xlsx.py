@@ -61,6 +61,10 @@ class Formats:
         self.cf_fail = add({"font_color": BAD, "bold": True})
 
 
+def _pct(v) -> str:
+    return "—" if v is None else f"{v:.1f}%"
+
+
 def P(v):
     """Analytics give percentages as 0-100; Excel wants fractions with a % format."""
     return None if v is None else v / 100
@@ -408,6 +412,18 @@ def _write_summary(wb, ws, f, rd, s, raw_names, n_raw, verification, n_days, ht)
         kv(f"Below the minimum guaranteed {g['mgds']:g} Mbps", f"{g['days_below']:,} of {g['days_with_data']:,} days had at least one "
            f"result below; longest run {g['longest']['days'] if g['longest'] else 0} consecutive day(s); runs of 3+ days: "
            + ("; ".join(f"{q['first']} to {q['last']} ({q['days']} days)" for q in g["qualifying"]) or "none"), f.wrap)
+    qs = sm.get("quality") or {}
+    if qs.get("n_ok"):
+        why = "; ".join(f"{qs['labels'][c]} {n:,}" for c, n in sorted(qs["flags"].items(), key=lambda kv_: -kv_[1]))
+        kv("Measurement quality", f"{qs['n_clean']:,} of {qs['n_ok']:,} successful scheduled tests were clean (nothing on the "
+           f"monitor's side could have held them down)" + (f". Labels: {why}" if why else ""), f.wrap)
+        cq = qs["clean"]
+        kv("Clean tests only", f"on target {_pct(cq['pct_target'])}, degraded {_pct(cq['pct_degraded'])}, severe "
+           f"{_pct(cq['pct_severe'])}" + (f", below the guarantee {_pct(cq['pct_below_guarantee'])}" if cq.get("pct_below_guarantee") is not None else "")
+           + f"; median {cq['download']['median']:,.1f} Mbps" if cq["download"]["median"] is not None else "no clean tests", f.wrap)
+    cap = rd.get("capacity") or {}
+    if cap.get("level") not in (None, "ok", "unknown"):
+        kv("Monitor capacity", cap["text"], f.wrap)
     ip = ans["isolated_poor"]
     kv("Isolated or recurring?", f"{ip['poor']:,} poor or failed tests: {ip['isolated']:,} isolated, {ip['in_runs']:,} in runs of "
        f"two or more; {ans['incidents']:,} confirmed degradation incidents", f.wrap)

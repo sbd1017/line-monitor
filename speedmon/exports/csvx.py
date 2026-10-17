@@ -13,7 +13,7 @@ import json
 import zipfile
 from pathlib import Path
 
-from .. import canonical, integrity, timeutil
+from .. import canonical, integrity, quality, settings_store, timeutil
 from ..config import VERSION
 from . import jobs
 
@@ -27,7 +27,7 @@ DIAG_COLS = ["cpu_load1", "cpu_load5", "cpu_temp_c", "throttled", "mem_available
 RAW_COLUMNS = [
     ("Local time", "_local", "dt", 19), ("UTC time", "started_at", "text", 24), ("UTC offset (min)", "utc_offset_min", "int", 9),
     ("Time zone", "tz_name", "text", 14), ("Status", "status", "text", 8), ("Failure code", "failure_code", "text", 14),
-    ("Failure detail", "failure_detail", "text", 30), ("Download (Mbps)", "download_mbps", "n2", 11),
+    ("Failure detail", "failure_detail", "text", 30), ("Measurement quality", "_quality", "text", 20), ("Download (Mbps)", "download_mbps", "n2", 11),
     ("Upload (Mbps)", "upload_mbps", "n2", 10), ("Ping idle (ms)", "ping_ms", "n2", 9), ("Jitter (ms)", "jitter_ms", "n2", 9),
     ("Ping low (ms)", "ping_low_ms", "n2", 9), ("Ping high (ms)", "ping_high_ms", "n2", 9),
     ("Latency under download (ms)", "dl_latency_ms", "n2", 11), ("Latency under upload (ms)", "ul_latency_ms", "n2", 11),
@@ -72,7 +72,7 @@ def raw_query(params: dict) -> tuple[str, str]:
     src = sources(params)
     ph = ",".join("?" * len(src))
     diag = ", ".join(f"d.{c}" for c in DIAG_COLS) + (", d.public_ip" if params.get("include_public_ip") else "")
-    sql = (f"SELECT m.*, {diag}, l.chain_index, l.chain_hash, dm.anomaly_z, "
+    sql = (f"SELECT m.*, {diag}, d.uuid AS _diag_uuid, l.chain_index, l.chain_hash, dm.anomaly_z, "
            f"(SELECT group_concat(f.flag || ': ' || f.reason, ' | ') FROM measurement_flags f WHERE f.measurement_uuid = m.uuid "
            f" AND f.revoked_at IS NULL) AS flags "
            f"FROM measurements m LEFT JOIN diagnostics d ON d.measurement_uuid = m.uuid "
@@ -101,10 +101,25 @@ def csv_value(v):
 def iter_rows(conn, s, a, b, params):
     sql, _ = raw_query(params)
     tz = s["timezone"]
+    pkc = settings_store.PackageClock(s["packages"], tz)
     for r in conn.execute(sql, (a, b, *sources(params))):
         d = dict(r)
         d["_local"] = timeutil.local(d["t_ms"], tz).strftime("%Y-%m-%d %H:%M:%S")
+        d["_quality"] = quality_text(d, pkc)
         yield d
+
+
+def quality_text(d: dict, pkc) -> str | None:
+    """'clean', or the measurement-quality labels that apply (speedmon/quality.py); empty for failures and imports."""
+    if d["status"] != "ok" or d["source"] not in ("agent", "synthetic"):
+        return None
+    diag = (d.get("link_speed_mbps"), d.get("link_speed_mbps"), d.get("_diag_uuid"), d.get("background_rx_mbps"),
+            d.get("background_tx_mbps"), d.get("pretest_rx_mbps"), d.get("pretest_tx_mbps"), d.get("cpu_load1"),
+            d.get("cpu_temp_c"), d.get("throttled"), d.get("rx_errors_delta"), d.get("tx_errors_delta"),
+            d.get("rx_dropped_delta"), d.get("tx_dropped_delta"))
+    codes = quality.assess(True, d["source"], d["kind"], d["download_mbps"], pkc.at(d["t_ms"]), diag)
+    names = [quality.FLAGS[c][0] for c in codes]
+    return ("clean" + (f" ({', '.join(names)})" if names else "")) if quality.is_clean(codes) else ", ".join(names)
 
 
 def count_rows(conn, a, b, params) -> int:

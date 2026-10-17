@@ -437,3 +437,13 @@ body.has-secnav .toast { bottom: calc(78px + env(safe-area-inset-bottom, 0px)); 
 }
 @media (prefers-reduced-motion: reduce) { .secnav-ink, .secnav a { transition: none; } }
 @media print { .secnav { display: none !important; } .page.has-secnav { padding-bottom: 0; } }
+
+/* Measurement quality and monitor capacity */
+.cap-note { margin: 14px 0 0; padding: 10px 14px; border-radius: 10px; font-size: 13px; color: var(--ink-2);
+  background: color-mix(in srgb, var(--warn) 10%, transparent); box-shadow: inset 2px 0 0 var(--warn); }
+.cap-note.bad { background: color-mix(in srgb, var(--crit) 12%, transparent); box-shadow: inset 2px 0 0 var(--crit); color: var(--ink); font-weight: 600; }
+.qtag { display: inline-block; font: 600 10.5px var(--mono); letter-spacing: .04em; padding: 2px 7px; border-radius: 6px; white-space: nowrap;
+  color: var(--mute); box-shadow: inset 0 0 0 1px var(--line-2); }
+.qtag.flag { color: var(--warn); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 45%, transparent); }
+.qtag.info { color: var(--ink-2); }
+@media print { .cap-note { background: none !important; box-shadow: inset 2px 0 0 #b87a00 !important; } }

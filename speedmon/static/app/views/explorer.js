@@ -2,7 +2,7 @@
 import { api, qs, state, h, clear, n, fmtDTs, toast, BASE } from '../util.js';
 import { openTest } from './detail.js';
 
-const COLS = [['time', 'Time'], ['download', 'Down'], ['upload', 'Up'], ['ping', 'Ping'], ['jitter', 'Jitter'], ['loss', 'Loss %'], [null, 'Status'], [null, 'Kind'], ['server', 'Server'], ['anomaly', 'Flags']];
+const COLS = [['time', 'Time'], ['download', 'Down'], ['upload', 'Up'], ['ping', 'Ping'], ['jitter', 'Jitter'], ['loss', 'Loss %'], [null, 'Status'], [null, 'Quality'], [null, 'Kind'], ['server', 'Server'], ['anomaly', 'Flags']];
 
 export async function mount(root, params) {
   const st = state.settings;
@@ -12,7 +12,7 @@ export async function mount(root, params) {
     range: h('select', {}, ...[['24h', 'Last 24 hours'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['90d', 'Last 90 days'], ['1y', 'Last year'], ['all', 'All'], ['custom', 'Custom…']].map(([v, t]) => h('option', { value: v, text: t }))),
     from: h('input', { type: 'datetime-local' }), to: h('input', { type: 'datetime-local' }),
     status: h('select', {}, h('option', { value: '', text: 'Any status' }), h('option', { value: 'ok', text: 'Successful' }), h('option', { value: 'failed', text: 'Failed' })),
-    filter: h('select', {}, ...[['', 'All results'], ['below_target', 'Below target'], ['degraded', 'Degraded'], ['severe', 'Severe'], ['anomaly', 'Anomalies'], ['flagged', 'Flagged by you']].map(([v, t]) => h('option', { value: v, text: t }))),
+    filter: h('select', {}, ...[['', 'All results'], ['below_target', 'Below target'], ['degraded', 'Degraded'], ['severe', 'Severe'], ['anomaly', 'Anomalies'], ['flagged', 'Flagged by you'], ['clean', 'Clean measurements'], ['quality_flagged', 'Possibly affected by the monitor']].map(([v, t]) => h('option', { value: v, text: t }))),
     kind: h('select', {}, ...[['', 'Any kind'], ['scheduled', 'Scheduled'], ['confirmation', 'Confirmation'], ['burst', 'Burst'], ['manual', 'Manual'], ['fallback', 'Fallback'], ['legacy', 'Legacy']].map(([v, t]) => h('option', { value: v, text: t }))),
     source: h('select', {}, h('option', { value: 'agent', text: 'Current monitor' }), h('option', { value: 'legacy', text: 'Legacy import' }), h('option', { value: 'all', text: 'All sources' })),
     server: h('select', {}, h('option', { value: '', text: 'Any server' })),
@@ -56,7 +56,10 @@ export async function mount(root, params) {
       tbody.append(h('tr', { tabindex: '0', onclick: () => openTest(m.uuid), onkeydown: (e) => { if (e.key === 'Enter') openTest(m.uuid); } },
         h('td', { class: 'mono', text: fmtDTs(m.t_ms) }), h('td', { class: 'r ' + band, text: ok ? n(m.download_mbps, 1) : '—' }), h('td', { class: 'r ' + bandUp, text: ok ? n(m.upload_mbps, 1) : '—' }),
         h('td', { class: 'r' + (m.ping_high ? ' b-below' : ''), text: n(m.ping_ms, 1), title: m.ping_high ? 'Above the latency threshold in Settings' : null }), h('td', { class: 'r', text: n(m.jitter_ms, 2) }), h('td', { class: 'r', text: m.packet_loss_pct == null ? '—' : n(m.packet_loss_pct, 1) }),
-        h('td', {}, ok ? 'ok' : h('span', { class: 'tag fail', text: m.failure_code })), h('td', {}, h('span', { class: 'tag' + (m.source.startsWith('legacy') ? ' legacy' : ''), text: m.kind })),
+        h('td', {}, ok ? 'ok' : h('span', { class: 'tag fail', text: m.failure_code })),
+        h('td', {}, ...(m.quality || []).map(c => { const l = (r.quality_labels || {})[c] || {}; return h('span', { class: 'qtag ' + (l.affects_clean ? 'flag' : 'info'), text: l.label || c, title: l.why || '' }); }),
+          ok && m.source !== 'legacy_csv' && m.source !== 'legacy_xlsx' && !(m.quality || []).some(c => (r.quality_labels || {})[c]?.affects_clean) && !(m.quality || []).length ? h('span', { class: 'muted', text: 'clean' }) : null),
+        h('td', {}, h('span', { class: 'tag' + (m.source.startsWith('legacy') ? ' legacy' : ''), text: m.kind })),
         h('td', { text: m.server_name || m.server_id || '—' }),
         h('td', {}, m.anomaly ? h('span', { class: 'tag anom', text: `anomaly z${n(m.anomaly_z, 1)}` }) : null, m.flags ? h('span', { class: 'tag', text: m.flags }) : null)));
     }

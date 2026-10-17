@@ -19,7 +19,7 @@ import statistics
 from collections import defaultdict
 from dataclasses import dataclass
 
-from . import settings_store, timeutil
+from . import quality, settings_store, timeutil
 
 WAN_FAILURES = {"wan_down", "dns_fail"}                       # the Internet itself was unreachable
 LOCAL_FAILURES = {"lan_fault", "link_down", "interrupted", "agent_error"}   # the Pi/LAN/monitor side, not the ISP
@@ -49,6 +49,11 @@ class T:
     hour: int = 0
     dow: int = 0
     minute: int = 0
+    q: tuple = ()                                                # quality codes (speedmon/quality.py)
+
+    @property
+    def clean(self) -> bool:
+        return quality.is_clean(self.q)
 
     @property
     def wan_fail(self) -> bool:
@@ -74,15 +79,21 @@ def load_tests(conn, from_ms: int, to_ms: int, settings: dict, include_excluded:
     clock = timeutil.LocalClock(settings["timezone"])
     pkc = settings_store.PackageClock(settings.get("packages"), settings["timezone"])
     out = []
-    q = (f"SELECT t_ms, uuid, status, download_mbps, upload_mbps, ping_ms, jitter_ms, packet_loss_pct, kind, source, "
-         f"failure_code, server_id, related_uuid FROM measurements WHERE t_ms >= ? AND t_ms < ? AND source IN "
-         f"({','.join('?' * len(sources))}) ORDER BY t_ms, id")
+    q = (f"SELECT m.t_ms, m.uuid, m.status, m.download_mbps, m.upload_mbps, m.ping_ms, m.jitter_ms, m.packet_loss_pct, "
+         f"m.kind, m.source, m.failure_code, m.server_id, m.related_uuid, {', '.join(quality.SQL_COLUMNS)} FROM measurements m "
+         f"LEFT JOIN diagnostics d ON d.measurement_uuid = m.uuid WHERE m.t_ms >= ? AND m.t_ms < ? AND m.source IN "
+         f"({','.join('?' * len(sources))}) ORDER BY m.t_ms, m.id")
+    seen = set()
     for r in conn.execute(q, (from_ms, to_ms, *sources)):
+        if r[1] in seen:                                         # a second diagnostics row for the same test
+            continue
+        seen.add(r[1])
         x = T(r[0], r[1], r[2] == "ok", r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[1] in excluded, r[12])
         if x.excluded and not include_excluded:
             continue
         x.day, x.hour, x.dow, x.minute = clock.parts(x.t)
         x.pk = pkc.at(x.t)
+        x.q = quality.assess(x.ok, x.source, x.kind, x.dl, x.pk, r[13:])
         out.append(x)
     return out
 
@@ -238,6 +249,7 @@ def summary(tests: list[T], settings: dict) -> dict:
     guaranteed = [x for x in ok if P(x).get("minimum_guaranteed_down")]
     if guaranteed:
         out["pct_below_guarantee"] = share(sum(1 for x in guaranteed if x.dl < P(x)["minimum_guaranteed_down"]), len(guaranteed))
+    out["quality"] = quality_summary(tests)
     out["packages"] = packages_in(all_tests, s)
     out["package"] = range_pk
     out["streaks"] = streaks(all_tests, s)
@@ -245,6 +257,27 @@ def summary(tests: list[T], settings: dict) -> dict:
 
 
 # ---------------------------------------------------------------- streaks and incidents
+
+def quality_summary(tests: list[T]) -> dict:
+    """The basis sample split by measurement quality: how many scheduled tests were clean, why the others weren't,
+    and the headline figures recomputed over the clean ones only (so a slow result the monitor might have caused
+    can be set aside, openly)."""
+    ok = [x for x in tests if x.ok]
+    clean = [x for x in ok if x.clean]
+    flags: dict = defaultdict(int)
+    for x in ok:
+        for c in x.q:
+            flags[c] += 1
+    dls = [x.dl for x in clean]
+    g = [x for x in clean if P(x).get("minimum_guaranteed_down")]
+    return {"n_ok": len(ok), "n_clean": len(clean), "n_flagged": len(ok) - len(clean), "flags": dict(flags),
+            "labels": {c: quality.FLAGS[c][0] for c in flags},
+            "clean": {"download": describe(dls),
+                      "pct_target": share(sum(1 for x in clean if x.dl >= P(x)["target_down"]), len(clean)),
+                      "pct_degraded": share(sum(1 for x in clean if x.dl < P(x)["degraded_down"]), len(clean)),
+                      "pct_severe": share(sum(1 for x in clean if x.dl < P(x)["severe_down"]), len(clean)),
+                      "pct_below_guarantee": share(sum(1 for x in g if x.dl < P(x)["minimum_guaranteed_down"]), len(g)) if g else None}}
+
 
 def _runs(tests: list[T], pred) -> list[tuple[int, int]]:
     """Index ranges [i, j] of maximal consecutive runs where pred holds."""

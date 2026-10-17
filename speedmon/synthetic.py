@@ -108,7 +108,8 @@ def seed(conn, days: int = 400, interval_min: int = 30, probe_interval_s: int = 
                           "t_ms": at, "cpu_load1": abs(rng.gauss(0.3, 0.2)), "cpu_temp_c": rng.gauss(47, 3),
                           "throttled": "0x0", "mem_available_pct": rng.gauss(60, 5), "iface": "eth0", "link_speed_mbps": 1000,
                           "link_duplex": "full", "link_state": "up", "rx_errors_delta": 0, "tx_errors_delta": 0,
-                          "background_rx_mbps": abs(rng.gauss(0.5, 0.5)), "background_tx_mbps": abs(rng.gauss(0.3, 0.3)),
+                          "background_rx_mbps": rng.uniform(30, 200) if rng.random() < 0.02 else abs(rng.gauss(0.5, 0.5)),   # ~2% Pi busy
+                          "background_tx_mbps": abs(rng.gauss(0.3, 0.3)),
                           "gateway_rtt_ms": abs(rng.gauss(0.5, 0.05)), "dns_ok": 0 if fail else 1, "agent_version": "synthetic"})
             if kind == "scheduled" and dl is not None and dl < 500:
                 burst_until = at + 60 * 60_000

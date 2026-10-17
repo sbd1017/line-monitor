@@ -17,7 +17,7 @@ import traceback
 import uuid as uuidlib
 from pathlib import Path
 
-from .. import analytics, integrity, settings_store, timeutil
+from .. import analytics, integrity, quality, settings_store, timeutil
 from ..config import VERSION
 
 FORMATS = ("xlsx", "csv", "csv.gz", "zip")
@@ -88,6 +88,9 @@ def report_data(conn, s: dict, a: int, b: int, label: str) -> dict:
         "incidents": len(degr), "isolated_poor": _isolated_poor(tests, s),
     }
     head = integrity.head(conn)
+    row = conn.execute("SELECT link_speed_mbps FROM measurements WHERE t_ms >= ? AND t_ms < ? AND source IN ('agent','synthetic') "
+                       "AND link_speed_mbps IS NOT NULL ORDER BY t_ms DESC LIMIT 1", (a, b)).fetchone()
+    link_last = row[0] if row else None
     shown_from = a if a > 86_400_000 else (sm["first_ms"] or a)          # "All data" starts at the first record
     return {
         "generated_at": timeutil.now_iso(), "generated_local": timeutil.fmt_local(timeutil.now_ms(), s["timezone"], True),
@@ -107,8 +110,9 @@ def report_data(conn, s: dict, a: int, b: int, label: str) -> dict:
                                          sm["package"]["advertised_down"]),
         "latency": probe_latency(conn, a, b), "guarantee": analytics.guarantee_watch(tests), "legacy_in_range": legacy_n, "servers": servers, "engines": engines,
         "annotations": notes, "answers": answers, "ledger": head,
+        "capacity": quality.capacity(link_last, sm["package"]),
         "methodology": methodology({**s, **{k: sm["package"].get(k) for k in ("advertised_down", "advertised_up",
-                                     "target_down", "degraded_down", "severe_down")}}, sm["packages"]),
+                                     "target_down", "degraded_down", "severe_down")}}, sm["packages"], legacy=legacy_n > 0),
     }
 
 
@@ -123,7 +127,7 @@ def _poor(x, s):
     return (not x.ok) or x.dl < x.pk["degraded_down"]
 
 
-def methodology(s: dict, packages: list | None = None) -> list[tuple[str, str]]:
+def methodology(s: dict, packages: list | None = None, legacy: bool = False) -> list[tuple[str, str]]:
     pk_text = "; ".join(f"from {p['from']}: {p['name']} (advertised {p['advertised_down']:g}/{p['advertised_up']:g} Mbps, "
                         f"on target ≥ {p['target_down']:g}, degraded < {p['degraded_down']:g}, severe < {p['severe_down']:g})"
                         for p in (packages or [])) or "one package throughout"
@@ -169,10 +173,21 @@ def methodology(s: dict, packages: list | None = None) -> list[tuple[str, str]]:
          "temperature, throttling flags, memory, other traffic on the Pi's own port during the test, router "
          "reachability and public-IP changes, so a slow result can be checked against problems on the Pi side. "
          "Traffic from other devices in the home is not visible to the Pi."),
-        ("Legacy data", "Results from 26 June 2025 to 6 October 2026 come from the earlier speedtest-cli scripts. That "
-         "tool is single-process Python, often ran twice at once, and sometimes picked distant servers, so those "
-         "results are marked legacy and kept out of the statistics unless the include-legacy setting is on. They are "
-         "preserved unchanged in the raw data with their original CSV line."),
+        ("Measurement quality", "Each successful test is checked against those diagnostics and is CLEAN unless something on "
+         f"the monitor's side could have held it down: other traffic on the Pi above {quality.BUSY_MBPS:g} Mbps (or "
+         f"{quality.BUSY_SHARE:.0%} of the result, if larger) during or just before the test ('Pi busy'); a load average "
+         f"above {quality.LOAD_LIMIT:g}, a temperature of {quality.TEMP_LIMIT:g} °C or more, or firmware throttling at the "
+         "time ('Pi under load'); Ethernet errors, or more than "
+         f"{quality.ERROR_LIMIT} dropped packets ('Ethernet errors'); a link too slow for the package's target ('Monitor "
+         "link too slow'); or missing diagnostics ('Not verified'). Two labels are informational and keep a test clean: "
+         f"'At the monitor's limit' (within {1 - quality.AT_LIMIT_SHARE:.0%} of what the Pi's link can carry, so the line "
+         "may be faster) and 'Fallback engine'. The headline figures use every scheduled test; the clean-only figures are "
+         "shown beside them so the effect of setting doubtful tests aside is visible. Traffic from other devices in the "
+         "home is not part of this check."),
+        *([("Imported data", "Results imported from an earlier speedtest-cli log are marked legacy and kept out of the "
+            "statistics unless the include-legacy setting is on. That tool is single-process Python, could run twice at "
+            "once and sometimes picked distant servers. Imported rows are preserved unchanged in the raw data with their "
+            "original line.")] if legacy else []),
         ("Times", f"Stored in UTC. Days and hours are in {s['timezone']} local time, including daylight-saving changes. "
          "Each raw row gives the UTC time, the local time and the UTC offset that applied."),
         ("Integrity", "Raw records cannot be edited or deleted by the application (database triggers refuse it). Each "
