@@ -1,5 +1,5 @@
 // Live: the connection right now, then everything the selected period says about it.
-import { api, qs, state, h, clear, section, seg, n, mbps, pct, ms, fmtDT, fmtTime, fmtDay, ago, dur, countdown, RANGES, rangeMs, css, toast, bandOf, BAND_LABEL } from '../util.js';
+import { nextTest, WAITS, api, qs, state, h, clear, section, seg, n, mbps, pct, ms, fmtDT, fmtTime, fmtDay, ago, dur, countdown, RANGES, rangeMs, css, toast, bandOf, BAND_LABEL } from '../util.js';
 import * as bus from '../bus.js';
 import { sectionNav } from '../sectionnav.js';
 import { TimeChart, speedPane, latencyPane, speedTooltip, latencyTooltip } from '../timechart.js';
@@ -415,16 +415,6 @@ export async function mount(root, params) {
   const nav = sectionNav(page, groups);
   cleanups.push(() => nav.destroy());
   return { destroy() { cleanups.forEach(f => f()); } };
-}
-
-// Waits that aren't a test: the 90 s gap after any test, a pause, the daily cap. Their end isn't when the next test runs.
-const WAITS = new Set(['spacing', 'paused', 'cap']);
-
-function nextTest(a) {
-  if (!a) return null;
-  const sched = a.next_scheduled_ms ?? Infinity;
-  if (WAITS.has(a.next_kind)) return a.next_kind === 'spacing' ? Math.max(a.next_test_ms ?? 0, sched) : sched;
-  return Math.min(a.next_test_ms ?? Infinity, sched);
 }
 
 // Measurement-quality tags for one test ({codes, clean, labels} from the API). Informational labels look quieter.

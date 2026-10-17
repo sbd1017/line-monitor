@@ -238,3 +238,13 @@ export function rangeMs(key, bounds) {
   }
   return [now - (map[key] || 7 * D), now + 60e3];
 }
+
+// Waits that aren't a test: the 90 s gap after any test, a pause, the daily cap. Their end isn't when the next test runs.
+export const WAITS = new Set(['spacing', 'paused', 'cap']);
+
+export function nextTest(a) {
+  if (!a) return null;
+  const sched = a.next_scheduled_ms ?? Infinity;
+  if (WAITS.has(a.next_kind)) return a.next_kind === 'spacing' ? Math.max(a.next_test_ms ?? 0, sched) : sched;
+  return Math.min(a.next_test_ms ?? Infinity, sched);
+}

@@ -1,6 +1,6 @@
 // One poller for /api/live shared by the header status and the Live view: every 10 s, every second while a
 // test is running, paused while the tab is hidden.
-import { api, h, clear, ago, countdown } from './util.js';
+import { api, h, clear, ago, countdown, nextTest } from './util.js';
 
 const subs = new Set();
 let last = null, timer = 0, running = false;
@@ -37,7 +37,7 @@ export function renderHeader(el, d) {
     el.append(h('span', { class: 'pill' }, h('i', { class: 'dot live' }), `Testing · ${a.phase || ''}`));
   } else {
     el.append(healthPill(d.health));
-    if (a?.online && a.next_scheduled_ms && !a.paused) el.append(h('span', { class: 'muted', text: `next test in ${countdown(Math.max(0, Math.min(a.next_test_ms ?? Infinity, a.next_scheduled_ms) - Date.now()))}` }));
+    if (a?.online && a.next_scheduled_ms && !a.paused) el.append(h('span', { class: 'muted', text: `next test in ${countdown(Math.max(0, nextTest(a) - Date.now()))}` }));
     if (a?.paused) el.append(h('span', { class: 'muted', text: 'paused' }));
   }
 }
