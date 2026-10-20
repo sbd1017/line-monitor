@@ -11,7 +11,6 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-import statistics
 import threading
 import traceback
 import uuid as uuidlib
@@ -276,5 +275,3 @@ class Exporter:
             traceback.print_exc()
 
 
-def _median(v):
-    return statistics.median(v) if v else None

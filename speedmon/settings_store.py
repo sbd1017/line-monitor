@@ -308,8 +308,15 @@ def danger_notes(changes: dict) -> list[str]:
     return notes
 
 
-def tests_per_day_estimate(s: dict) -> float:
-    return 1440 / max(s["interval_min"], HARD["min_interval_min"])
+def download_band(mbps: float, pk: dict) -> str:
+    """Where a successful download sits against its package: target, below (target missed), degraded or severe."""
+    if mbps >= pk["target_down"]:
+        return "target"
+    if mbps < pk["severe_down"]:
+        return "severe"
+    if mbps < pk["degraded_down"]:
+        return "degraded"
+    return "below"
 
 
 def save(conn, changes: dict, source: str = "settings") -> dict:

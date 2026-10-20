@@ -1,5 +1,5 @@
 // The measurement detail drawer: the raw record, diagnostics, ledger proof, owner corrections, nearby probes.
-import { api, h, clear, n, fmtDTs, fmtDT, fmtTime, dur, toast, state, css } from '../util.js';
+import { api, h, clear, n, fmtDTs, fmtDT, fmtTime, dur, toast, state, css, utcMinute } from '../util.js';
 
 export function openDrawer(content) {
   const d = document.getElementById('drawer');
@@ -37,7 +37,7 @@ export async function openTest(uid) {
       link_slow: `Link ${m.link_speed_mbps || '?'} Mb/s.`,
       at_link_limit: q.capacity?.ceiling_mbps ? `The link carries about ${n(q.capacity.ceiling_mbps, 0)} Mbps at most.` : '',
     };
-    box.append(...[h('h3', { style: { margin: '20px 0 6px' }, text: 'Measurement quality' }),
+    box.append(...[h('h3', { text: 'Measurement quality' }),
       h('p', { class: doubt.length ? 'cap-note' : 'muted', style: { marginTop: 0 }, text: doubt.length
         ? `Not clean: something on the monitor's side could have held this result down, so the clean-only figures leave it out.`
         : 'Clean: nothing on the monitor\'s side could have held this result down.' }),
@@ -45,7 +45,7 @@ export async function openTest(uid) {
         h('span', { class: 'muted', text: [l.why, evidence[l.code]].filter(Boolean).join(' ') }))),
       q.capacity && !['ok', 'unknown'].includes(q.capacity.level) ? h('p', { class: 'muted', style: { margin: '6px 0' }, text: q.capacity.text }) : null].filter(Boolean));
   }
-  box.append(h('h3', { style: { margin: '20px 0 6px' }, text: 'Measurement (raw, immutable)' }), kv([
+  box.append(h('h3', { text: 'Measurement (raw, immutable)' }), kv([
     ['Status', m.status + (m.failure_detail ? ` · ${m.failure_detail}` : '')], ['Download', ok ? `${n(m.download_mbps, 2)} Mbps` : '—'], ['Upload', ok ? `${n(m.upload_mbps, 2)} Mbps` : '—'],
     ['Ping (idle)', m.ping_ms == null ? '—' : `${n(m.ping_ms, 2)} ms (low ${n(m.ping_low_ms, 1)}, high ${n(m.ping_high_ms, 1)})`], ['Jitter', m.jitter_ms == null ? '—' : `${n(m.jitter_ms, 2)} ms`],
     ['Latency under load', m.dl_latency_ms == null ? '—' : `down ${n(m.dl_latency_ms, 1)} ms · up ${n(m.ul_latency_ms, 1)} ms`],
@@ -57,7 +57,7 @@ export async function openTest(uid) {
     ['Pi link', m.iface ? `${m.iface} · ${m.link_speed_mbps || '?'} Mb/s ${m.link_duplex || ''} · ${m.link_state || ''}` : '—'],
   ]));
   if (g) {
-    box.append(h('h3', { style: { margin: '20px 0 6px' }, text: 'Diagnostics captured with it (separate record)' }), kv([
+    box.append(h('h3', { text: 'Diagnostics captured with it (separate record)' }), kv([
       ['Pi CPU load', g.cpu_load1 == null ? '—' : `${n(g.cpu_load1, 2)} (1 min) · ${n(g.cpu_load5, 2)} (5 min)`], ['Pi CPU temperature', g.cpu_temp_c == null ? '—' : `${n(g.cpu_temp_c, 1)} °C`],
       ['Throttling flags', g.throttled == null ? '—' : `${g.throttled}${g.throttled === '0x0' ? ' (none)' : ' (power/thermal limits seen since boot)'}`],
       ['Memory available', g.mem_available_pct == null ? '—' : `${n(g.mem_available_pct, 0)}%`],
@@ -70,26 +70,26 @@ export async function openTest(uid) {
       ['Pi uptime', g.pi_uptime_s == null ? '—' : dur(g.pi_uptime_s * 1000)], ['Agent', g.agent_version],
     ]));
   }
-  box.append(h('h3', { style: { margin: '20px 0 6px' }, text: 'Integrity' }), kv([
+  box.append(h('h3', { text: 'Integrity' }), kv([
     ['Record hash', h('span', { class: 'hash', text: m.record_hash })], ['Recomputed now', d.hash_ok ? '✓ matches' : '✗ DOES NOT MATCH'],
     ['Ledger position', d.ledger ? `#${n(d.ledger.chain_index)} · stored ${d.ledger.recorded_at}` : '—'], ['Chain hash', d.ledger ? h('span', { class: 'hash', text: d.ledger.chain_hash }) : '—'],
     ['Agent sequence', m.agent_seq == null ? '— (import)' : n(m.agent_seq)], ['Record UUID', h('span', { class: 'hash', text: m.uuid })],
     d.derived?.anomaly_z != null ? ['Anomaly score', `z = ${n(d.derived.anomaly_z, 2)} vs median ${n(d.derived.ref_median, 0)} (${d.derived.ref_n} refs)${d.derived.anomaly ? ' · ANOMALY' : ''}`] : null,
   ]));
   if (d.related.length > 1) {
-    box.append(h('h3', { style: { margin: '20px 0 6px' }, text: 'Related tests' }));
+    box.append(h('h3', { text: 'Related tests' }));
     for (const r of d.related.filter(x => x.uuid !== m.uuid)) box.append(h('p', {}, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openTest(r.uuid); }, text: `${fmtDT(r.t_ms)} · ${r.kind} · ${r.status === 'ok' ? n(r.download_mbps, 0) + ' Mbps' : 'failed'}` })));
   }
   if (d.probes.length) {
-    box.append(h('h3', { style: { margin: '20px 0 6px' }, text: 'Probes ±15 minutes' }),
+    box.append(h('h3', { text: 'Probes ±15 minutes' }),
       h('p', { class: 'mono', style: { fontSize: '12px', lineHeight: 1.7 } }, d.probes.map(p => `${fmtTime(p[0])} ${p[1]} ${p[2] == null ? '—' : n(p[2], 1) + 'ms'}`).join('  ·  ')));
   }
   // owner corrections
   const flags = h('div', {});
-  box.append(h('h3', { style: { margin: '20px 0 6px' }, text: 'Your corrections (stored separately; never change the record)' }), flags);
+  box.append(h('h3', { text: 'Your corrections (stored separately; never change the record)' }), flags);
   for (const f of d.flags) {
-    flags.append(h('div', { class: 'callout', style: { marginBottom: '8px' } }, h('b', { text: f.flag }), ` · ${f.reason} · added ${f.created_at.slice(0, 16).replace('T', ' ')}`,
-      f.revoked_at ? h('div', { class: 'muted', text: `revoked ${f.revoked_at.slice(0, 16).replace('T', ' ')}: ${f.revoked_reason}` })
+    flags.append(h('div', { class: 'callout', style: { marginBottom: '8px' } }, h('b', { text: f.flag }), ` · ${f.reason} · added ${utcMinute(f.created_at)}`,
+      f.revoked_at ? h('div', { class: 'muted', text: `revoked ${utcMinute(f.revoked_at)}: ${f.revoked_reason}` })
         : h('button', { class: 'btn small', style: { marginLeft: '8px' }, text: 'Revoke', onclick: async () => {
           const reason = prompt('Why revoke this flag?'); if (!reason) return;
           await api(`/flag/${f.id}/revoke`, { body: { reason } }); openTest(uid);

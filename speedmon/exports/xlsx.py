@@ -13,8 +13,8 @@ import xlsxwriter
 from .. import canonical, integrity, timeutil
 from . import csvx, jobs
 
-NAVY, INK, MUTED, LINE, TEAL, PAPER = "#0B1B2E", "#13263B", "#5B6B7D", "#D5DCE4", "#0E8A96", "#F4F7FA"
-GOOD, WARN, BAD, SEVERE = "#1F8F5F", "#C98A12", "#C2452D", "#8E1B1B"
+NAVY, INK, MUTED, LINE, TEAL = "#0B1B2E", "#13263B", "#5B6B7D", "#D5DCE4", "#0E8A96"
+GOOD, WARN, BAD = "#1F8F5F", "#C98A12", "#C2452D"
 
 
 class Formats:
@@ -55,7 +55,6 @@ class Formats:
         self.bad = add({**base, "bold": True, "font_color": BAD})
         self.mono = add({**base, "font_name": "Consolas", "font_size": 9, "font_color": INK})
         self.cf_good = add({"bg_color": "#DDF2E6", "font_color": "#145C3D"})
-        self.cf_warn = add({"bg_color": "#FBEFD5", "font_color": "#7A5208"})
         self.cf_bad = add({"bg_color": "#F8DCD5", "font_color": "#8A2A17"})
         self.cf_severe = add({"bg_color": "#E9B9B2", "font_color": "#5E0E0E", "bold": True})
         self.cf_fail = add({"font_color": BAD, "bold": True})

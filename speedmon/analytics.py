@@ -32,7 +32,7 @@ WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 
 
 @dataclass(slots=True)
-class T:
+class Measurement:
     t: int
     uuid: str
     ok: bool
@@ -75,7 +75,7 @@ class T:
 # ---------------------------------------------------------------- loading
 
 def load_tests(conn, from_ms: int, to_ms: int, settings: dict, include_excluded: bool = False,
-               include_legacy: bool | None = None) -> list[T]:
+               include_legacy: bool | None = None) -> list[Measurement]:
     """Tests in [from_ms, to_ms) in time order, from the store of every loaded test (see _TestStore), so a long period
     costs a slice of a list rather than re-reading and re-assessing years of tests on every request."""
     legacy = settings.get("include_legacy") if include_legacy is None else include_legacy
@@ -98,18 +98,18 @@ def _excluded(conn) -> set:
         "SELECT measurement_uuid FROM measurement_flags WHERE flag = 'exclude' AND revoked_at IS NULL")}
 
 
-def _load_rows(conn, where: str, args: tuple, settings: dict, excluded: set, strings: dict) -> list[T]:
-    """Build T objects (local time parts, package, quality codes) for the measurements matching `where`. A test
+def _load_rows(conn, where: str, args: tuple, settings: dict, excluded: set, strings: dict) -> list[Measurement]:
+    """Build Measurement objects (local time parts, package, quality codes) for the measurements matching `where`. A test
     with two diagnostics rows uses the first one stored."""
     clock = timeutil.LocalClock(settings["timezone"])
     pkc = settings_store.PackageClock(settings.get("packages"), settings["timezone"])
-    s_ = lambda v: v if v is None else strings.setdefault(v, v)          # one copy of each repeated string
+    shared = lambda v: v if v is None else strings.setdefault(v, v)      # one copy of each repeated string
     out, seen = [], set()
     for r in conn.execute(_LOAD_SQL + where + " ORDER BY m.t_ms, m.id, d.id", args):
         if r[1] in seen:                                         # a second diagnostics row for the same test
             continue
         seen.add(r[1])
-        x = T(r[0], r[1], r[2] == "ok", r[3], r[4], r[5], r[6], r[7], s_(r[8]), s_(r[9]), s_(r[10]), s_(r[11]),
+        x = Measurement(r[0], r[1], r[2] == "ok", r[3], r[4], r[5], r[6], r[7], shared(r[8]), shared(r[9]), shared(r[10]), shared(r[11]),
               r[1] in excluded, r[12], mid=r[13])
         x.day, x.hour, x.dow, x.minute = clock.parts(x.t)
         x.pk = pkc.at(x.t)
@@ -119,7 +119,7 @@ def _load_rows(conn, where: str, args: tuple, settings: dict, excluded: set, str
 
 
 class _TestStore:
-    """Every test in one database as T objects (all sources, flagged ones marked), kept in time order between
+    """Every test in one database as Measurement objects (all sources, flagged ones marked), kept in time order between
     requests. Each use checks, in one read snapshot, what changed since: new measurements and diagnostics are
     loaded on their own (a diagnostics row arriving after its test reloads that test); a new or revoked flag, a
     different time zone or package history, or a different database (a fresh start) reloads everything. The
@@ -129,7 +129,7 @@ class _TestStore:
 
     def __init__(self):
         self.lock = threading.Lock()
-        self.list: list[T] = []
+        self.list: list[Measurement] = []
         self.keys: list[int] = []
         self.state = None                                        # (fingerprint, flags, (mid, uuid), (did, uuid))
         self.strings: dict = {}
@@ -145,7 +145,7 @@ class _TestStore:
                 st = cls._all[path] = cls()
             return st
 
-    def tests(self, conn, settings: dict) -> tuple[list[T], list[int]]:
+    def tests(self, conn, settings: dict) -> tuple[list[Measurement], list[int]]:
         """(every test in time order, their t_ms) as of now."""
         with self.lock:
             conn.execute("BEGIN")                                # one snapshot for the checks and the loading
@@ -261,28 +261,16 @@ def share(n: int, d: int) -> float | None:
     return (100.0 * n / d) if d else None
 
 
-def thresholds(settings: dict) -> dict:
-    return {"target": settings["target_down"], "degraded": settings["degraded_down"], "severe": settings["severe_down"],
-            "target_up": settings["target_up"], "degraded_up": settings["degraded_up"]}
-
-
-def band(x: T, s: dict) -> str:
+def band(x: Measurement, s: dict) -> str:
     if not x.ok:
         return "local" if x.local_fail else ("outage" if x.wan_fail else "failed")
-    p = x.pk or s
-    if x.dl >= p["target_down"]:
-        return "target"
-    if x.dl < p["severe_down"]:
-        return "severe"
-    if x.dl < p["degraded_down"]:
-        return "degraded"
-    return "below"                                                   # between degraded and target
+    return settings_store.download_band(x.dl, x.pk or s)
 
 
 BASIS_KINDS = ("scheduled", "legacy")
 
 
-def basis(tests: list[T]) -> list[T]:
+def basis(tests: list[Measurement]) -> list[Measurement]:
     """The unbiased sample for statistics: scheduled tests only (their timing is random within each slot).
     Confirmation, burst and manual tests deliberately over-sample bad moments, so they are left out of
     percentages and averages (they still count for streaks and incidents). When a scheduled test failed because
@@ -295,12 +283,7 @@ def basis(tests: list[T]) -> list[T]:
     return out
 
 
-def P(x) -> dict:
-    """The package (thresholds, advertised speeds) a test is judged against."""
-    return x.pk
-
-
-def packages_in(tests: list[T], s: dict) -> list[dict]:
+def packages_in(tests: list[Measurement], s: dict) -> list[dict]:
     """Packages in force during these tests, with headline figures for each (scheduled tests only)."""
     groups: dict = {}
     for x in basis(tests):
@@ -318,7 +301,7 @@ def packages_in(tests: list[T], s: dict) -> list[dict]:
     return out
 
 
-def summary(tests: list[T], settings: dict) -> dict:
+def summary(tests: list[Measurement], settings: dict) -> dict:
     """Statistics over the basis sample (see basis()); streaks over every test in time order."""
     s = settings
     all_tests = tests
@@ -334,7 +317,7 @@ def summary(tests: list[T], settings: dict) -> dict:
     up_ok = [x.ul for x in ok if x.ul is not None]
     ul_ok = [x for x in ok if x.ul is not None]
     range_pk = (all_tests[-1].pk if all_tests and all_tests[-1].pk else s.get("package") or s)
-    tier_ok = [x for x in ok if P(x) is range_pk or P(x).get("from") == range_pk.get("from")]
+    tier_ok = [x for x in ok if x.pk is range_pk or x.pk.get("from") == range_pk.get("from")]
     out = {
         "n": len(tests), "n_ok": n_ok, "n_failed": len(fails),
         "n_failed_isp": sum(1 for x in fails if x.isp_fail), "n_outage": sum(1 for x in fails if x.wan_fail),
@@ -344,26 +327,26 @@ def summary(tests: list[T], settings: dict) -> dict:
         "ping": describe([x.ping for x in ok]), "jitter": describe([x.jitter for x in ok]),
         "loss": describe([x.loss for x in ok]),
         "tests_with_loss_pct": share(sum(1 for x in ok if (x.loss or 0) > 0), sum(1 for x in ok if x.loss is not None)),
-        "pct_target": share(sum(1 for x in ok if x.dl >= P(x)["target_down"]), n_ok),
-        "pct_below_target": share(sum(1 for x in ok if x.dl < P(x)["target_down"]), n_ok),
-        "pct_degraded": share(sum(1 for x in ok if x.dl < P(x)["degraded_down"]), n_ok),
-        "pct_severe": share(sum(1 for x in ok if x.dl < P(x)["severe_down"]), n_ok),
+        "pct_target": share(sum(1 for x in ok if x.dl >= x.pk["target_down"]), n_ok),
+        "pct_below_target": share(sum(1 for x in ok if x.dl < x.pk["target_down"]), n_ok),
+        "pct_degraded": share(sum(1 for x in ok if x.dl < x.pk["degraded_down"]), n_ok),
+        "pct_severe": share(sum(1 for x in ok if x.dl < x.pk["severe_down"]), n_ok),
         "pct_failed": share(sum(1 for x in counted if x.isp_fail), len(counted)),
         "pct_outage": share(sum(1 for x in counted if x.wan_fail), len(counted)),
-        "up_pct_target": share(sum(1 for x in ul_ok if x.ul >= P(x)["target_up"]), len(ul_ok)),
-        "up_pct_degraded": share(sum(1 for x in ul_ok if x.ul < P(x)["degraded_up"]), len(ul_ok)),
+        "up_pct_target": share(sum(1 for x in ul_ok if x.ul >= x.pk["target_up"]), len(ul_ok)),
+        "up_pct_degraded": share(sum(1 for x in ul_ok if x.ul < x.pk["degraded_up"]), len(ul_ok)),
         "tiers": [{"mbps": t, "pct": share(sum(1 for x in tier_ok if x.dl >= t), len(tier_ok))} for t in range_pk["tiers"]],
         "tiers_package": range_pk["name"],
         # each test as a share of the package it was on, so periods spanning an upgrade stay meaningful
-        "pct_of_advertised_median": percentile(sorted(100 * x.dl / P(x)["advertised_down"] for x in ok), 50) if ok else None,
-        "pct_of_advertised_mean": (sum(100 * x.dl / P(x)["advertised_down"] for x in ok) / n_ok) if ok else None,
-        "up_pct_of_advertised_median": percentile(sorted(100 * x.ul / P(x)["advertised_up"] for x in ul_ok), 50) if ul_ok else None,
+        "pct_of_advertised_median": percentile(sorted(100 * x.dl / x.pk["advertised_down"] for x in ok), 50) if ok else None,
+        "pct_of_advertised_mean": (sum(100 * x.dl / x.pk["advertised_down"] for x in ok) / n_ok) if ok else None,
+        "up_pct_of_advertised_median": percentile(sorted(100 * x.ul / x.pk["advertised_up"] for x in ul_ok), 50) if ul_ok else None,
         "excluded": 0, "n_all": len(all_tests),
         "kinds": {k: sum(1 for x in all_tests if x.kind == k) for k in sorted({x.kind for x in all_tests})},
     }
-    guaranteed = [x for x in ok if P(x).get("minimum_guaranteed_down")]
+    guaranteed = [x for x in ok if x.pk.get("minimum_guaranteed_down")]
     if guaranteed:
-        out["pct_below_guarantee"] = share(sum(1 for x in guaranteed if x.dl < P(x)["minimum_guaranteed_down"]), len(guaranteed))
+        out["pct_below_guarantee"] = share(sum(1 for x in guaranteed if x.dl < x.pk["minimum_guaranteed_down"]), len(guaranteed))
     out["quality"] = quality_summary(tests)
     out["packages"] = packages_in(all_tests, s)
     out["package"] = range_pk
@@ -373,7 +356,7 @@ def summary(tests: list[T], settings: dict) -> dict:
 
 # ---------------------------------------------------------------- streaks and incidents
 
-def quality_summary(tests: list[T]) -> dict:
+def quality_summary(tests: list[Measurement]) -> dict:
     """The basis sample split by measurement quality: how many scheduled tests were clean, why the others weren't,
     and the headline figures recomputed over the clean ones only (so a slow result the monitor might have caused
     can be set aside, openly)."""
@@ -384,17 +367,17 @@ def quality_summary(tests: list[T]) -> dict:
         for c in x.q:
             flags[c] += 1
     dls = [x.dl for x in clean]
-    g = [x for x in clean if P(x).get("minimum_guaranteed_down")]
+    g = [x for x in clean if x.pk.get("minimum_guaranteed_down")]
     return {"n_ok": len(ok), "n_clean": len(clean), "n_flagged": len(ok) - len(clean), "flags": dict(flags),
             "labels": {c: quality.FLAGS[c][0] for c in flags},
             "clean": {"download": describe(dls),
-                      "pct_target": share(sum(1 for x in clean if x.dl >= P(x)["target_down"]), len(clean)),
-                      "pct_degraded": share(sum(1 for x in clean if x.dl < P(x)["degraded_down"]), len(clean)),
-                      "pct_severe": share(sum(1 for x in clean if x.dl < P(x)["severe_down"]), len(clean)),
-                      "pct_below_guarantee": share(sum(1 for x in g if x.dl < P(x)["minimum_guaranteed_down"]), len(g)) if g else None}}
+                      "pct_target": share(sum(1 for x in clean if x.dl >= x.pk["target_down"]), len(clean)),
+                      "pct_degraded": share(sum(1 for x in clean if x.dl < x.pk["degraded_down"]), len(clean)),
+                      "pct_severe": share(sum(1 for x in clean if x.dl < x.pk["severe_down"]), len(clean)),
+                      "pct_below_guarantee": share(sum(1 for x in g if x.dl < x.pk["minimum_guaranteed_down"]), len(g)) if g else None}}
 
 
-def _runs(tests: list[T], pred) -> list[tuple[int, int]]:
+def _runs(tests: list[Measurement], pred) -> list[tuple[int, int]]:
     """Index ranges [i, j] of maximal consecutive runs where pred holds."""
     runs, start = [], None
     for i, x in enumerate(tests):
@@ -416,7 +399,7 @@ def _run_info(tests, run, label):
             "before_ms": tests[i - 1].t if i > 0 else None, "after_ms": tests[j + 1].t if j + 1 < len(tests) else None}
 
 
-def streaks(tests: list[T], s: dict) -> dict:
+def streaks(tests: list[Measurement], s: dict) -> dict:
     seq = [x for x in tests if not x.local_fail]
     good = lambda x: x.ok and x.dl >= x.pk["target_down"]
     poor = lambda x: (not x.ok) or x.dl < x.pk["degraded_down"]
@@ -451,7 +434,7 @@ def streaks(tests: list[T], s: dict) -> dict:
     return out
 
 
-def degradation_incidents(tests: list[T], s: dict, min_tests: int = 2) -> list[dict]:
+def degradation_incidents(tests: list[Measurement], s: dict, min_tests: int = 2) -> list[dict]:
     """Runs of >= min_tests consecutive tests that were degraded or failed (ISP-side). Confirmed, not one-offs."""
     seq = [x for x in tests if not x.local_fail]
     pred = lambda x: (not x.ok) or x.dl < x.pk["degraded_down"]
@@ -498,7 +481,7 @@ def outage_incidents(conn, from_ms: int, to_ms: int, min_probes: int = 2) -> lis
     return out
 
 
-def guarantee_watch(tests: list[T]) -> dict:
+def guarantee_watch(tests: list[Measurement]) -> dict:
     """The contract's minimum guaranteed download speed (Virgin: if the speed falls below it on 3 or more consecutive
     days, continuously or intermittently, and isn't fixed within 30 days of reporting, the customer may leave
     without an early-disconnection fee). Per local day: successful tests below the guarantee. Runs of consecutive
@@ -549,7 +532,7 @@ def guarantee_watch(tests: list[T]) -> dict:
 
 # ---------------------------------------------------------------- time analysis
 
-def group_stats(tests: list[T], key, s: dict) -> dict:
+def group_stats(tests: list[Measurement], key, s: dict) -> dict:
     groups: dict = defaultdict(list)
     for x in tests:
         groups[key(x)].append(x)
@@ -576,17 +559,17 @@ def group_stats(tests: list[T], key, s: dict) -> dict:
     return out
 
 
-def daily(tests: list[T], s: dict) -> list[dict]:
+def daily(tests: list[Measurement], s: dict) -> list[dict]:
     g = group_stats(tests, lambda x: x.day, s)
     return [{"day": k, **v} for k, v in sorted(g.items())]
 
 
-def hourly(tests: list[T], s: dict) -> list[dict]:
+def hourly(tests: list[Measurement], s: dict) -> list[dict]:
     g = group_stats(tests, lambda x: x.hour, s)
     return [{"hour": h, **g.get(h, {"n": 0, "n_ok": 0})} for h in range(24)]
 
 
-def weekday(tests: list[T], s: dict) -> list[dict]:
+def weekday(tests: list[Measurement], s: dict) -> list[dict]:
     g = group_stats(tests, lambda x: x.dow, s)
     return [{"dow": d, "name": WEEKDAYS[d], **g.get(d, {"n": 0, "n_ok": 0})} for d in range(7)]
 
@@ -609,7 +592,7 @@ def rank_groups(rows: list[dict], min_n: int = 5) -> dict:
     return {"best": max(eligible, key=lambda r: r["median"]), "worst": min(eligible, key=lambda r: r["median"])}
 
 
-def rolling_extremes(tests: list[T], window_ms: int, min_n: int) -> dict:
+def rolling_extremes(tests: list[Measurement], window_ms: int, min_n: int) -> dict:
     """Best and worst mean download over any window [t, t + window) that starts at a test and holds >= min_n
     successful tests. Labelled as rolling averages of sampled tests."""
     ts = [x.t for x in tests if x.ok]
@@ -634,7 +617,7 @@ def rolling_extremes(tests: list[T], window_ms: int, min_n: int) -> dict:
     return {"best": best, "worst": worst, "min_n": min_n}
 
 
-def time_analysis(tests: list[T], s: dict) -> dict:
+def time_analysis(tests: list[Measurement], s: dict) -> dict:
     tests = basis(tests)
     days = daily(tests, s)
     hours = hourly(tests, s)
@@ -787,7 +770,7 @@ def _hhmm(minute: int) -> str:
     return f"{minute // 60:02d}:{minute % 60:02d}"
 
 
-def congestion(tests: list[T], s: dict) -> dict:
+def congestion(tests: list[Measurement], s: dict) -> dict:
     """Recurring time-of-day slowdowns, separately for weekdays and weekends.
 
     For each 30-minute local time-of-day bin, the downloads in that bin are compared with the rest of the day
@@ -906,7 +889,7 @@ def histogram(values: list, width: float, top: float) -> list[dict]:
     return [{"lo": i * width, "hi": (i + 1) * width, "n": c, "pct": 100 * c / total} for i, c in enumerate(counts)]
 
 
-def heatmap(tests: list[T], s: dict) -> dict:
+def heatmap(tests: list[Measurement], s: dict) -> dict:
     tests = basis(tests)
     cells: dict = defaultdict(list)
     fails: dict = defaultdict(int)
@@ -930,21 +913,19 @@ def heatmap(tests: list[T], s: dict) -> dict:
     return {"rows": rows}
 
 
-def calendar(tests: list[T], s: dict, outage_minutes: dict | None = None) -> list[dict]:
+def calendar(tests: list[Measurement], s: dict, outage_minutes: dict | None = None) -> list[dict]:
     out = []
     for d in daily(basis(tests), s):
         cls = "none"
         if d["n_ok"]:
-            m = d["median"]
-            cls = ("target" if m >= d["target_down"] else "below" if m >= d["degraded_down"]
-                   else "degraded" if m >= d["severe_down"] else "severe")
+            cls = settings_store.download_band(d["median"], d)
         elif d["failed"]:
             cls = "failed"
         out.append({**d, "class": cls, "outage_min": (outage_minutes or {}).get(d["day"], 0)})
     return out
 
 
-def dna(tests: list[T], s: dict) -> dict:
+def dna(tests: list[Measurement], s: dict) -> dict:
     """Features for the Connection DNA glyph: one spoke per local hour."""
     all_tests, tests = tests, basis(tests)
     spokes = []
@@ -967,7 +948,7 @@ def dna(tests: list[T], s: dict) -> dict:
                                           "jitter": sm["jitter"]["median"], "stability": stability}}
 
 
-def compare(a_all: list[T], b_all: list[T], s: dict) -> dict:
+def compare(a_all: list[Measurement], b_all: list[Measurement], s: dict) -> dict:
     a, b = basis(a_all), basis(b_all)
     da = [x.dl for x in a if x.ok]
     db = [x.dl for x in b if x.ok]
@@ -995,7 +976,7 @@ def _verdict(test, da, db) -> str:
 
 # ---------------------------------------------------------------- coverage
 
-def coverage(conn, from_ms: int, to_ms: int, s: dict, tests: list[T]) -> dict:
+def coverage(conn, from_ms: int, to_ms: int, s: dict, tests: list[Measurement]) -> dict:
     """Monitoring coverage: how much of the period the monitor was actually watching (from probes), and how many
     of the scheduled tests happened."""
     now = timeutil.now_ms()

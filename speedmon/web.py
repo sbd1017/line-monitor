@@ -16,7 +16,6 @@ import hashlib
 import hmac
 import json
 import logging
-import sqlite3
 import threading
 import time
 import uuid as uuidlib
@@ -25,7 +24,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -233,9 +232,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ------------------------------------------------------------ helpers
 
-    def S(conn) -> dict:
-        return settings_store.get_all(conn)
-
     def audit(conn, action: str, detail: dict | None = None) -> None:
         conn.execute("INSERT INTO audit_log (at, action, detail) VALUES (?, ?, ?)",
                      (timeutil.now_iso(), action, json.dumps(detail or {})[:2000]))
@@ -244,14 +240,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse({"error": message}, status_code=status)
 
     def data_version(conn) -> str:
+        """Changes whenever a cached figure could: a new test or its diagnostics (they arrive as separate records, and
+        decide the measurement-quality labels), a flag, or a setting."""
         m = conn.execute("SELECT coalesce(max(id), 0) FROM measurements").fetchone()[0]
+        d = conn.execute("SELECT coalesce(max(id), 0) FROM diagnostics").fetchone()[0]
         f = conn.execute("SELECT coalesce(max(id), 0), count(revoked_at) FROM measurement_flags").fetchone()
         st = conn.execute("SELECT coalesce(max(updated_at), '') FROM settings").fetchone()[0]
-        return f"{m}:{f[0]}:{f[1]}:{st}"
+        return f"{m}:{d}:{f[0]}:{f[1]}:{st}"
 
-    def rng(conn, request: Request, prefix: str = "") -> tuple[int, int, str]:
+    def requested_period(conn, request: Request, prefix: str = "") -> tuple[int, int, str]:
         q = request.query_params
-        s = S(conn)
+        s = settings_store.get_all(conn)
         preset = q.get(prefix + "range") or s["default_range"]
         if q.get(prefix + "from") and q.get(prefix + "to") and preset in ("custom", "ms"):
             if preset == "ms":
@@ -262,7 +261,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return timeutil.resolve_range("custom", s["timezone"], q[prefix + "from"], q[prefix + "to"])
         return timeutil.resolve_range(preset, s["timezone"], first_ms=analytics.first_ms(conn, s))
 
-    def rkey(request: Request, prefix: str = "") -> tuple:
+    def period_key(request: Request, prefix: str = "") -> tuple:
         """Cache key for a requested period: presets relative to "now" are reused for 10 minutes (and until new data
         arrives, via data_version); all-time and custom periods until new data arrives."""
         q = request.query_params
@@ -334,7 +333,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def shell(request: Request):
         with db.read() as conn:
-            synthetic = S(conn).get("data_origin") == "synthetic"
+            synthetic = settings_store.get_all(conn).get("data_origin") == "synthetic"
         return templates.TemplateResponse(request, "app.html", {"csrf": request.state.session["csrf"],
                                                                 "synthetic": synthetic})
 
@@ -348,7 +347,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get(BASE + "/api/bootstrap")
     def bootstrap(request: Request):
         with db.read() as conn:
-            s = S(conn)
+            s = settings_store.get_all(conn)
             return {"version": VERSION, "env": settings.env, "settings": {k: s[k] for k in s if k != "data_origin"},
                     "synthetic": s.get("data_origin") == "synthetic", "bounds": analytics.data_bounds(conn, s),
                     "fields": settings_store.describe(), "hard": settings_store.HARD, "now_ms": timeutil.now_ms(),
@@ -360,7 +359,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def live_payload() -> dict:
         with db.read() as conn:
-            s = S(conn)
+            s = settings_store.get_all(conn)
             now = timeutil.now_ms()
             last = conn.execute("SELECT * FROM measurements WHERE source IN ('agent','synthetic') ORDER BY t_ms DESC LIMIT 1").fetchone()
             last_ok = conn.execute("SELECT * FROM measurements WHERE source IN ('agent','synthetic') AND status = 'ok' "
@@ -397,7 +396,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         elif last_probe and now - last_probe["t_ms"] < 5 * 60_000:
             health = {"ok": "ok", "degraded": "latency", "wan_down": "outage", "dns_fail": "outage",
                       "lan_fault": "local", "link_down": "local"}.get(last_probe["state"], "ok")
-            last_pk = settings_store.PackageClock(s["packages"], s["timezone"]).at(last["t_ms"]) if last else s
+            last_pk = pkc_live.at(last["t_ms"]) if last else s
             if health == "ok" and last and last["status"] == "ok" and last["download_mbps"] < last_pk["degraded_down"] \
                     and now - last["t_ms"] < 2 * 3600_000:
                 health = "degraded"
@@ -407,13 +406,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if not r:
                 return None
             d = public_test(r)
-            pk = settings_store.PackageClock(s["packages"], s["timezone"]).at(r["t_ms"])
+            pk = pkc_live.at(r["t_ms"])
             d["package"] = {k: pk[k] for k in ("name", "advertised_down", "advertised_up", "target_down", "degraded_down",
                                                "severe_down", "target_up")}
             if r["status"] == "ok":
                 v = r["download_mbps"]
-                d["band"] = ("target" if v >= pk["target_down"] else "severe" if v < pk["severe_down"]
-                             else "degraded" if v < pk["degraded_down"] else "below")
+                d["band"] = settings_store.download_band(v, pk)
                 d["pct_of_advertised"] = 100 * v / pk["advertised_down"]
             codes = qlast.get(r["uuid"], ())
             d["quality"] = {"codes": list(codes), "clean": quality.is_clean(codes), "labels": quality.labels(codes)}
@@ -431,9 +429,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def summary_view(request: Request):
         try:
             with db.read() as conn:
-                a, b, label = rng(conn, request)
-                s = S(conn)
-                key = ("summary", rkey(request), data_version(conn))
+                a, b, label = requested_period(conn, request)
+                s = settings_store.get_all(conn)
+                key = ("summary", period_key(request), data_version(conn))
 
                 def build():
                     tests = analytics.load_tests(conn, a, b, s)
@@ -465,7 +463,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except (KeyError, ValueError):
             return err("from and to (ms) are required")
         with db.read() as conn:
-            s = S(conn)
+            s = settings_store.get_all(conn)
             legacy = q.get("legacy", "1" if s["include_legacy"] else "0") == "1"
             g = max(60_000, (b - a) // 400)                       # quantise so pans/re-requests hit the cache
             px = int(q.get("px", 1200))
@@ -490,10 +488,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def timeline_view(request: Request):
         try:
             with db.read() as conn:
-                a, b, label = rng(conn, request)
+                a, b, label = requested_period(conn, request)
                 st = agent_status(conn)
                 out = series.timeline(conn, a, b, st["last_seen_ms"] if st else None)
-                s = S(conn)
+                s = settings_store.get_all(conn)
                 tests = analytics.load_tests(conn, a, b, s)
                 out["tests"] = [[x.t, analytics.band(x, s)] for x in tests if analytics.band(x, s) != "target"][-5000:]
                 out["range"] = {"from_ms": a, "to_ms": b, "label": label}
@@ -507,9 +505,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         def view(request: Request):
             try:
                 with db.read() as conn:
-                    a, b, label = rng(conn, request)
-                    s = S(conn)
-                    key = (name, rkey(request), data_version(conn))
+                    a, b, label = requested_period(conn, request)
+                    s = settings_store.get_all(conn)
+                    key = (name, period_key(request), data_version(conn))
                     return cached(key, lambda: {"range": {"from_ms": a, "to_ms": b, "label": label},
                                                 **fn(conn, analytics.load_tests(conn, a, b, s), s, a, b)})
             except ValueError as exc:
@@ -535,7 +533,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def anomalies(request: Request):
         try:
             with db.read() as conn:
-                a, b, _ = rng(conn, request)
+                a, b, _ = requested_period(conn, request)
                 rows = conn.execute("SELECT m.uuid, m.t_ms, m.download_mbps, m.upload_mbps, d.anomaly_z, d.ref_median, d.ref_n "
                                     "FROM measurements m JOIN derived_measurement d ON d.uuid = m.uuid WHERE d.anomaly = 1 "
                                     "AND m.t_ms >= ? AND m.t_ms < ? ORDER BY m.t_ms DESC LIMIT 500", (a, b)).fetchall()
@@ -548,10 +546,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def compare_view(request: Request):
         try:
             with db.read() as conn:
-                s = S(conn)
-                a1, b1, la = rng(conn, request, "a_")
-                a2, b2, lb = rng(conn, request, "b_")
-                key = ("compare", rkey(request, "a_"), rkey(request, "b_"), data_version(conn))
+                s = settings_store.get_all(conn)
+                a1, b1, la = requested_period(conn, request, "a_")
+                a2, b2, lb = requested_period(conn, request, "b_")
+                key = ("compare", period_key(request, "a_"), period_key(request, "b_"), data_version(conn))
                 first = analytics.data_bounds(conn, s)["first_ms"]
                 return cached(key, lambda: {"a_range": {"from_ms": a1, "to_ms": b1, "label": la}, "data_from_ms": first,
                                             "b_range": {"from_ms": a2, "to_ms": b2, "label": lb},
@@ -564,9 +562,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def evidence(request: Request):
         try:
             with db.read() as conn:
-                a, b, label = rng(conn, request)
-                s = S(conn)
-                key = ("evidence", rkey(request), data_version(conn))
+                a, b, label = requested_period(conn, request)
+                s = settings_store.get_all(conn)
+                key = ("evidence", period_key(request), data_version(conn))
                 return cached(key, lambda: export_jobs.report_data(conn, s, a, b, label))
         except ValueError as exc:
             return err(str(exc))
@@ -577,9 +575,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
              "jitter": "m.jitter_ms", "loss": "m.packet_loss_pct", "server": "m.server_name", "anomaly": "abs(d.anomaly_z)"}
 
     def explorer_where(conn, q) -> tuple[str, list]:
-        s = S(conn)
+        s = settings_store.get_all(conn)
         where, args = [], []
-        a, b, _ = rng(conn, type("R", (), {"query_params": q})())
+        a, b, _ = requested_period(conn, type("R", (), {"query_params": q})())
         where.append("m.t_ms >= ? AND m.t_ms < ?")
         args += [a, b]
         for col, lo, hi in (("m.download_mbps", "dl_min", "dl_max"), ("m.upload_mbps", "ul_min", "ul_max"),
@@ -665,8 +663,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 servers = [dict(r) for r in conn.execute(
                     "SELECT server_id, server_name, server_location, count(*) AS n FROM measurements WHERE server_id IS NOT "
                     "NULL GROUP BY server_id ORDER BY n DESC LIMIT 60")]
-                pkc = settings_store.PackageClock(S(conn)["packages"], S(conn)["timezone"])
-                lat_poor = S(conn)["latency_degraded_ms"]
+                s = settings_store.get_all(conn)
+                pkc = settings_store.PackageClock(s["packages"], s["timezone"])
+                lat_poor = s["latency_degraded_ms"]
                 qc = quality_codes(conn, [dict(r) for r in rows], pkc)
                 items = []
                 for r in rows:
@@ -675,8 +674,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     if d["status"] == "ok" and d["download_mbps"] is not None:
                         pk = pkc.at(d["t_ms"])
                         v = d["download_mbps"]
-                        d["band"] = ("target" if v >= pk["target_down"] else "severe" if v < pk["severe_down"]
-                                     else "degraded" if v < pk["degraded_down"] else "below")
+                        d["band"] = settings_store.download_band(v, pk)
                         u = d["upload_mbps"]
                         if u is not None and pk.get("target_up"):
                             d["band_up"] = ("target" if u >= pk["target_up"]
@@ -725,9 +723,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "SELECT uuid, t_ms, kind, status, download_mbps FROM measurements WHERE related_uuid = ? OR uuid = ?",
                 (uid, m.get("related_uuid") or ""))]
             calc = canonical.record_hash("measurement", m)
-            s = S(conn)
-            pk = settings_store.PackageClock(s["packages"], s["timezone"]).at(m["t_ms"])
-            codes = quality_codes(conn, [m], settings_store.PackageClock(s["packages"], s["timezone"]))[m["uuid"]]
+            s = settings_store.get_all(conn)
+            pkc = settings_store.PackageClock(s["packages"], s["timezone"])
+            pk = pkc.at(m["t_ms"])
+            codes = quality_codes(conn, [m], pkc)[m["uuid"]]
             qual = {"codes": list(codes), "clean": quality.is_clean(codes), "labels": quality.labels(codes),
                     "assessed": m["status"] == "ok" and m["source"] in ("agent", "synthetic"),
                     "capacity": quality.capacity(m.get("link_speed_mbps") or (d or {}).get("link_speed_mbps"), pk)}
@@ -795,7 +794,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body = await request.json()
         try:
             with db.tx() as conn:
-                a = annotation_from(body, S(conn)["timezone"])
+                a = annotation_from(body, settings_store.get_all(conn)["timezone"])
                 now = timeutil.now_iso()
                 uid = str(uuidlib.uuid4())
                 cur = conn.execute("INSERT INTO annotations (uuid, start_ms, end_ms, title, body, category, created_at, updated_at) "
@@ -821,7 +820,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     conn.execute("INSERT INTO annotation_history (annotation_id, at, action, snapshot) VALUES (?, ?, 'delete', '{}')",
                                  (row["id"], now))
                     return {"ok": True}
-                a = annotation_from(body, S(conn)["timezone"])
+                a = annotation_from(body, settings_store.get_all(conn)["timezone"])
                 conn.execute("UPDATE annotations SET start_ms = ?, end_ms = ?, title = ?, body = ?, category = ?, updated_at = ? "
                              "WHERE id = ?", (a["start_ms"], a["end_ms"], a["title"], a["body"], a["category"], now, row["id"]))
                 conn.execute("INSERT INTO annotation_history (annotation_id, at, action, snapshot) VALUES (?, ?, 'update', ?)",
@@ -835,7 +834,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get(BASE + "/api/settings")
     def get_settings(request: Request):
         with db.read() as conn:
-            s = S(conn)
+            s = settings_store.get_all(conn)
             hist = [dict(r) for r in conn.execute("SELECT key, old_value, new_value, changed_at, source FROM settings_history "
                                                   "ORDER BY id DESC LIMIT 50")]
             sizes = conn.execute("SELECT avg(coalesce(download_bytes, 0) + coalesce(upload_bytes, 0)) FROM (SELECT * FROM "
@@ -850,7 +849,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         changes = body.get("changes") or {}
         try:
             with db.tx() as conn:
-                clean = settings_store.validate(changes, S(conn))
+                clean = settings_store.validate(changes, settings_store.get_all(conn))
                 notes = settings_store.danger_notes(clean)
                 if notes and not body.get("confirm"):
                     return JSONResponse({"needs_confirmation": notes}, status_code=409)
@@ -900,7 +899,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with db.read() as conn:
             st = agent_status(conn)
             return {"head": integrity.head(conn), "last": verify_state["result"], "running": verify_state["running"],
-                    "epoch": S(conn).get("epoch"),
+                    "epoch": settings_store.get_all(conn).get("epoch"),
                     "sequence": integrity.sequence_gaps(conn),
                     "agent_queue": {"depth": st.get("queue_depth"), "oldest_ms": st.get("oldest_unsent_ms"),
                                     "rejected": st.get("rejected_local")} if st else None,
@@ -941,7 +940,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body = await request.json()
         try:
             with db.tx() as conn:
-                s = S(conn)
+                s = settings_store.get_all(conn)
                 preset = body.get("range", "all")
                 first = analytics.data_bounds(conn, {**s, "include_legacy": True})["first_ms"]
                 a, b, label = timeutil.resolve_range(preset, s["timezone"], body.get("from"), body.get("to"), first_ms=first)
@@ -1010,7 +1009,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get(AGENT + "v1/config")
     def agent_config(request: Request):
         with db.tx() as conn:
-            s = S(conn)
+            s = settings_store.get_all(conn)
             cmds = [dict(r) for r in conn.execute("SELECT id, kind, payload, created_at FROM commands WHERE status = 'pending' "
                                                   "ORDER BY id")]
             stale = timeutil.iso(timeutil.now_ms() - 15 * 60_000)
@@ -1025,7 +1024,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def status_document() -> dict:
         now = timeutil.now_ms()
         with db.read() as conn:
-            s = S(conn)
+            s = settings_store.get_all(conn)
 
             def guarantee():
                 return analytics.guarantee_watch(analytics.load_tests(conn, now - 35 * timeutil.DAY_MS, now, s,
@@ -1046,7 +1045,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def warm_tests():
         try:                                             # load every test once, so the first page view doesn't wait for it
             with db.read() as conn:
-                analytics.load_tests(conn, 0, 1, S(conn))
+                analytics.load_tests(conn, 0, 1, settings_store.get_all(conn))
         except Exception as exc:
             log.warning("tests not preloaded: %s", exc)
 

@@ -117,7 +117,6 @@ export class Gauge {
       ctx.strokeStyle = cssIn(this.el, '--ink'); ctx.lineWidth = 2; ctx.lineCap = 'butt';
       ctx.beginPath(); ctx.moveTo(cx + Math.cos(A) * (r2 + 3), cy + Math.sin(A) * (r2 + 3)); ctx.lineTo(cx + Math.cos(A) * (r2 + 9), cy + Math.sin(A) * (r2 + 9)); ctx.stroke();
     }
-    // centre
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     const big = Math.round(ri * 0.62);
     if (this.live) {
@@ -188,7 +187,6 @@ export class Pulse {
     ctx.fillStyle = cssIn(this.el, '--mute'); ctx.font = `10px ${cssIn(this.el, '--mono')}`;
     for (const v of niceTicks(0, top, 3)) { const yy = Math.round(y(v)) + .5; ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W, yy); ctx.stroke(); ctx.fillText(`${v} ms`, 6, yy - 4); }
     for (let t = Math.ceil(a / 1800e3) * 1800e3; t < now; t += 1800e3) { if (x(t) < W - 40) ctx.fillText(fmtTime(t), x(t) + 3, H - 4); }
-    // outages
     for (const p of this.points) {
       if (['wan_down', 'dns_fail', 'lan_fault', 'link_down'].includes(p[4])) {
         ctx.fillStyle = cssIn(this.el, ['wan_down', 'dns_fail'].includes(p[4]) ? '--crit' : '--offline'); ctx.globalAlpha = .35;

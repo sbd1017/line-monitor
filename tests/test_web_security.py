@@ -1,6 +1,6 @@
 import time
 
-from helpers import KEY, item, measurement, signed
+from helpers import item, measurement, signed
 
 PROTECTED = ["/speedtest/", "/speedtest/settings", "/speedtest/api/summary", "/speedtest/api/measurement/x", "/speedtest/nonexistent",
              "/speedtest/exports/abc/download", "/speedtest/static/app/main.js"]
@@ -66,7 +66,6 @@ def test_agent_session_cannot_reach_owner_api_and_vice_versa(signed_in):
 def test_private_values_never_sent_to_browser(signed_in):
     c = signed_in
     rec, raw = measurement(seq=1)
-    from speedmon import canonical
     import uuid
     diag = {"uuid": str(uuid.uuid4()), "measurement_uuid": rec["uuid"], "agent_id": "pi", "agent_seq": 2, "t_ms": rec["t_ms"],
             "public_ip": "203.0.113.77", "public_ip_changed": 0}

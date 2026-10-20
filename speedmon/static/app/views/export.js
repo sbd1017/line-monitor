@@ -1,5 +1,5 @@
 // Export: any period up to ALL data, as a polished XLSX report, raw CSV / CSV.GZ, or a ZIP evidence pack.
-import { api, state, h, clear, section, seg, n, toast, BASE, fmtDT } from '../util.js';
+import { api, state, h, clear, section, seg, n, toast, BASE, fmtDT, utcMinute } from '../util.js';
 
 const RANGES = [['today', 'Today'], ['yesterday', 'Yesterday'], ['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days'], ['this_month', 'This month'], ['last_month', 'Last month'], ['this_year', 'This year'], ['all', 'ALL DATA'], ['custom', 'Custom']];
 const FORMATS = [['xlsx', 'XLSX report'], ['csv', 'CSV'], ['csv.gz', 'CSV.GZ'], ['zip', 'ZIP evidence pack']];
@@ -58,7 +58,7 @@ export async function mount(root) {
       busy ||= e.status === 'queued' || e.status === 'running';
       const status = e.status === 'running' ? h('div', { style: { minWidth: '120px' } }, h('div', { class: 'progress' }, h('i', { style: { width: `${Math.round(e.progress * 100)}%` } })), h('small', { class: 'muted', text: `${Math.round(e.progress * 100)}%` }))
         : e.status === 'failed' ? h('span', { class: 'tag fail', text: 'failed', title: e.error || '' }) : h('span', { class: 'tag', text: e.status });
-      tb.append(h('tr', { style: { cursor: 'default' } }, h('td', { class: 'mono', text: e.created_at.slice(0, 16).replace('T', ' ') }), h('td', { text: e.range_label }), h('td', { text: e.format }), h('td', {}, status),
+      tb.append(h('tr', { style: { cursor: 'default' } }, h('td', { class: 'mono', text: utcMinute(e.created_at) }), h('td', { text: e.range_label }), h('td', { text: e.format }), h('td', {}, status),
         h('td', { class: 'r', text: e.rows == null ? '' : n(e.rows) }), h('td', { class: 'r', text: e.file_bytes == null ? '' : `${n(e.file_bytes / 1e6, 1)} MB` }),
         h('td', { class: 'hash', title: e.file_sha256 || '', text: e.file_sha256 ? e.file_sha256.slice(0, 16) + '…' : '' }),
         h('td', {}, e.status === 'done' ? h('a', { class: 'btn small primary', href: `${BASE}/exports/${e.uuid}/download`, download: '', text: 'Download' }) : (e.error ? h('small', { class: 'muted', text: e.error.slice(0, 80) }) : null))));

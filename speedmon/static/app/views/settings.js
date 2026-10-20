@@ -1,5 +1,5 @@
 // Settings: package, thresholds, schedule (with hard safety limits), engines, display. Every change is logged.
-import { api, state, h, clear, section, n, toast, fmtDT, localParts } from '../util.js';
+import { api, state, h, clear, section, n, toast, fmtDT, localParts, utcMinute } from '../util.js';
 import { refreshSettings } from '../main.js';
 import * as bus from '../bus.js';
 
@@ -109,7 +109,7 @@ export async function mount(root) {
     }
     page.append(h('div', { style: { display: 'flex', gap: '10px', padding: '12px 0 20px' } }, h('button', { class: 'btn primary', text: 'Save settings', onclick: save }), h('button', { class: 'btn', text: 'Revert', onclick: render })));
     const hist = h('table', { class: 'data' }, h('thead', {}, h('tr', {}, ...['When (UTC)', 'Setting', 'From', 'To', 'Source'].map(t => h('th', { text: t })))),
-      h('tbody', {}, ...r.history.map(x => h('tr', { style: { cursor: 'default' } }, h('td', { class: 'mono', text: x.changed_at.slice(0, 16).replace('T', ' ') }), h('td', { text: x.key }),
+      h('tbody', {}, ...r.history.map(x => h('tr', { style: { cursor: 'default' } }, h('td', { class: 'mono', text: utcMinute(x.changed_at) }), h('td', { text: x.key }),
         h('td', { text: x.old_value ?? '—' }), h('td', { text: x.new_value }), h('td', { text: x.source })))));
     page.append(section('', 'Change history', 'every settings change is recorded', h('div', { class: 'table-wrap' }, hist)));
     estimate();

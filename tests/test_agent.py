@@ -43,7 +43,7 @@ def test_failed_engine_records_failure_and_runs_fallback(tmp_path, monkeypatch, 
     a.cfg["fallback_engine"] = "backup"
     out = a.run_test("scheduled", "slot")
     assert out["status"] == "ok" and out["fallback"]["status"] == "ok"
-    res = deliver(a, db)
+    deliver(a, db)
     with db.read() as c:
         rows = c.execute("SELECT kind, status, failure_code, related_uuid FROM measurements ORDER BY t_ms").fetchall()
     assert [r["status"] for r in rows] == ["failed", "ok"] and rows[1]["kind"] == "fallback" and rows[1]["related_uuid"]

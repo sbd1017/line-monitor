@@ -7,7 +7,7 @@ S = settings_store.apply_current({f.key: f.default for f in settings_store.FIELD
 
 
 def T(t, dl, kind="scheduled", ok=True, failure=None, uuid=None, related=None):
-    x = analytics.T(t, uuid or str(t), ok, dl if ok else None, 100.0 if ok else None, 10.0, 1.0, 0.0, kind, "agent",
+    x = analytics.Measurement(t, uuid or str(t), ok, dl if ok else None, 100.0 if ok else None, 10.0, 1.0, 0.0, kind, "agent",
                     failure, "1", False, related)
     x.day, x.hour, x.dow, x.minute = timeutil.LocalClock("Europe/London").parts(t)
     x.pk = S["package"]

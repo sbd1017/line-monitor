@@ -47,12 +47,11 @@ function fmtr(opts) {
   return dtf[key];
 }
 export const fmtTime = (t) => fmtr({ hour: '2-digit', minute: '2-digit' }).format(t);
-export const fmtTimeS = (t) => fmtr({ hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(t);
 export const fmtDate = (t) => fmtr({ day: 'numeric', month: 'short', year: 'numeric' }).format(t);
 export const fmtDay = (t) => fmtr({ weekday: 'short', day: 'numeric', month: 'short' }).format(t);
 export const fmtDT = (t) => t == null ? '—' : fmtr({ weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(t);
 export const fmtDTs = (t) => t == null ? '—' : fmtr({ day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(t);
-export const tzName = (t) => fmtr({ timeZoneName: 'short' }).formatToParts(t).find(p => p.type === 'timeZoneName')?.value || '';
+export const utcMinute = (iso) => iso.slice(0, 16).replace('T', ' ');      // stored UTC timestamps, as recorded
 export function localParts(t) {
   const p = Object.fromEntries(fmtr({ year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(t).map(x => [x.type, x.value]));
   return { y: +p.year, m: +p.month, d: +p.day, h: +p.hour, min: +p.minute, date: `${p.year}-${p.month}-${p.day}` };
@@ -225,7 +224,6 @@ export function divColor(el, v, st) {
   const f = Math.min(1, (st.degraded_down - v) / Math.max(1, st.degraded_down - st.severe_down));
   return g(f >= 1 ? '--div-n3' : f >= 0.5 ? '--div-n2' : '--div-n1');
 }
-export const bandColor = (b) => ({ target: css('--dl'), below: css('--warn'), degraded: css('--serious'), severe: css('--crit'), failed: css('--crit'), outage: css('--crit'), local: css('--offline') }[b] || css('--mute'));
 
 export const RANGES = [['1h', '1H'], ['6h', '6H'], ['24h', '24H'], ['7d', '7D'], ['30d', '30D'], ['90d', '90D'], ['1y', '1Y'], ['all', 'ALL']];
 export function rangeMs(key, bounds) {

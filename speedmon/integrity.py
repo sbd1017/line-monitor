@@ -76,9 +76,9 @@ def verify(conn, progress=None) -> dict:
             "truncated": len(problems) > 200, "hash_version": canonical.HASH_VERSION}
 
 
-def sequence_gaps(conn, agent_outbox_floor: dict | None = None) -> list[dict]:
-    """Per agent: sequence numbers never received. ``agent_outbox_floor`` (from agent status) tells which are
-    still waiting in the agent's outbox, so they are reported as pending rather than missing."""
+def sequence_gaps(conn) -> list[dict]:
+    """Per agent: the range of sequence numbers received and how many in it never arrived. Records still waiting in
+    the agent's outbox count as missing here; the Integrity page shows the outbox depth beside it."""
     out = []
     union = " UNION ".join(f"SELECT DISTINCT agent_id FROM {t} WHERE agent_seq IS NOT NULL" for t in STREAM_TABLE.values())
     agents = [r[0] for r in conn.execute(union)]

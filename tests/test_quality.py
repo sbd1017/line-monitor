@@ -41,7 +41,6 @@ def test_capacity_levels():
 
 def test_summary_reports_clean_only_figures(db):
     import uuid
-    from speedmon import canonical
     t0 = timeutil.now_ms() - 6 * 3600_000
     items = []
     for i, (dl, pre) in enumerate([(130.0, 0.1), (131.0, 0.2), (60.0, 150.0)]):     # the slow one ran while the Pi was busy

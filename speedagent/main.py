@@ -55,7 +55,6 @@ class Agent:
         self.status_dirty = threading.Event()
         self.last_probe = None
         self.last_error = None
-        self.backend_ok = None
         self.sender_down = False
         self.decision = {}
         home = str(settings.state_dir / "engine-home")
@@ -165,13 +164,12 @@ class Agent:
                 self.store.mark(ok, rej)
                 if rej:
                     log.error("backend rejected %d record(s): %s", len(rej), list(rej.values())[:3])
-                self.backend_ok, backoff = True, 2
+                backoff = 2
             except UplinkError as exc:
                 self.store.failed_attempt([b["seq"] for b in batch], str(exc))
                 if not self.sender_down:
                     log.warning("backend unreachable (%s); records stay queued until it's back", exc)
                 self.sender_down = True
-                self.backend_ok = False
                 self.send_now.clear()
                 self.send_now.wait(backoff)             # the control loop wakes us as soon as the backend answers
                 backoff = min(backoff * 2, 60)
@@ -203,9 +201,8 @@ class Agent:
                             self.wake.set()
                     if self.sender_down:
                         self.send_now.set()
-                    self.backend_ok = True
                 except UplinkError:
-                    self.backend_ok = False
+                    pass                                # unreachable backend: the sender logs it and retries
             try:
                 self.up.status(self.status())
             except UplinkError:

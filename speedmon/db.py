@@ -85,11 +85,6 @@ class Database:
         finally:
             conn.close()
 
-    def schema_version(self) -> int:
-        with self.read() as conn:
-            row = conn.execute("SELECT max(version) FROM schema_migrations").fetchone()
-            return row[0] or 0
-
 
 def _statements(sql: str):
     """Split a migration into statements. Comments are removed first; migrations must not put

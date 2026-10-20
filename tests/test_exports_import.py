@@ -1,15 +1,13 @@
 import csv
 import html
 import gzip
-import io
 import json
 import re
 import subprocess
 import sys
 import zipfile
-from pathlib import Path
 
-from speedmon import importer, ingest, integrity, synthetic, timeutil
+from speedmon import importer, integrity, synthetic, timeutil
 from speedmon.exports import jobs
 
 

@@ -91,7 +91,7 @@ export class TimeChart {
     if (A < lo && B - A < hi - lo) { A = lo; B = A + span; }
     this.range = [Math.round(A), Math.round(B)];
     this.draw();
-    if (refetch) { clearTimeout(this.loadTimer); this.loadTimer = setTimeout(() => this.load(), 160); }   // not this.t: that's the x→time method
+    if (refetch) { clearTimeout(this.loadTimer); this.loadTimer = setTimeout(() => this.load(), 160); }
     this.o.onRange?.(this.range);
   }
 
@@ -246,7 +246,6 @@ export class TimeChart {
       ctx.fillStyle = ink2; ctx.textAlign = 'left'; ctx.font = `600 10px ${mono}`;
       ctx.fillText(pane.label.toUpperCase(), PAD_L + 2, top + 10);
       ctx.beginPath(); ctx.rect(PAD_L, top, W - PAD_L - PAD_R, H + 2); ctx.clip();
-      // annotations
       for (const an of (this.data?.annotations || [])) {
         const x1 = this.x(an.start_ms), x2 = an.end_ms ? this.x(an.end_ms) : x1;
         ctx.fillStyle = cssIn(this.el, '--glow-soft');
@@ -278,7 +277,6 @@ export class TimeChart {
       ctx.restore();
       top += H + GAP;
     }
-    // time axis
     const ay = top - GAP + 4;
     ctx.strokeStyle = axis; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(PAD_L, ay + .5); ctx.lineTo(W - PAD_R, ay + .5); ctx.stroke();

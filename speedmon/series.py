@@ -41,8 +41,7 @@ def tests(conn, from_ms: int, to_ms: int, px: int, legacy: bool, s: dict) -> dic
             band = None
             if r[4] == "ok":
                 pk = pkc.at(r[0])
-                band = ("target" if r[1] >= pk["target_down"] else "severe" if r[1] < pk["severe_down"]
-                        else "degraded" if r[1] < pk["degraded_down"] else "below")
+                band = settings_store.download_band(r[1], pk)
             pts.append([r[0], r[1], r[2], r[3], 1 if r[4] == "ok" else 0, r[5], r[6],
                         1 if r[7].startswith("legacy") else 0, r[8], int(r[9] or 0), 1 if r[5] in excluded else 0, band])
         return {"mode": "raw", "n": n, "bucket_ms": None,

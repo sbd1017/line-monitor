@@ -106,10 +106,9 @@ main#view { flex: 1; outline: none; }
 .kicker .right { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .grid { display: grid; gap: 28px; }
 .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .g-5-7 { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
 .g-7-5 { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
-@media (max-width: 1100px) { .g3, .g-5-7, .g-7-5 { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .g-5-7, .g-7-5 { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .g2 { grid-template-columns: 1fr; } }
 .block h3 { font-size: 13px; font-weight: 600; color: var(--ink-2); letter-spacing: 0; margin-bottom: 4px; font-family: var(--sans); }
 .block .cap { color: var(--mute); font-size: 12px; margin-bottom: 12px; }
@@ -262,10 +261,9 @@ svg.viz [data-tip]:hover { filter: brightness(1.25); }
 .list { display: grid; }
 .list .item { display: grid; grid-template-columns: 150px 1fr auto; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); align-items: center; font-size: 13px; cursor: pointer; }
 .list .item:hover { background: var(--surface-2); }
+.list.static .item { cursor: default; }                  /* rows that open nothing (Integrity) */
 
 /* percentiles strip */
-.pstrip { position: relative; height: 86px; }
-.pstrip svg { width: 100%; height: 86px; }
 
 /* calendar */
 .cal { overflow-x: auto; padding-bottom: 6px; }
@@ -302,6 +300,7 @@ table.data tbody tr:hover td { background: var(--surface-2); }
 /* drawer */
 .drawer { position: fixed; inset: 0 0 0 auto; width: min(640px, 100vw); z-index: 50; background: var(--surface); box-shadow: -1px 0 0 var(--line-2), -40px 0 80px rgba(0, 0, 0, .5); overflow-y: auto; padding: 22px 24px 40px; animation: slide .25s cubic-bezier(.2, .8, .2, 1); }
 @keyframes slide { from { transform: translateX(30px); opacity: 0; } }
+.drawer h3 { margin: 20px 0 6px; }
 .drawer .close { position: sticky; top: 0; float: right; }
 .kv { display: grid; grid-template-columns: minmax(140px, 40%) 1fr; gap: 0; font-size: 13px; }
 .kv > div { padding: 6px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
