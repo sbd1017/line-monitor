@@ -10,7 +10,7 @@ import json
 import re
 import statistics
 
-from . import canonical, timeutil
+from . import canonical, rollups, timeutil
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 STREAM_TABLE = {"measurement": "measurements", "diagnostic": "diagnostics", "probe": "probes", "event": "events"}
@@ -100,10 +100,11 @@ def insert_record(conn, stream: str, rec: dict, rhash: str, raw: str | None = No
     if stream == "measurement":
         cols.append("raw")
         vals.append(raw)
-    conn.execute(f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", vals)
+    cur = conn.execute(f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", vals)
     append_ledger(conn, stream, rec["uuid"], rhash)
     if stream == "probe":
         rollup_probe(conn, rec)
+        rollups.add_probe(conn, cur.lastrowid)
     elif stream == "measurement" and rec["status"] == "ok":
         update_anomaly(conn, rec)
 
@@ -236,6 +237,7 @@ def rebuild_derived(conn) -> dict:
     for r in conn.execute("SELECT * FROM probes ORDER BY t_ms"):
         rollup_probe(conn, dict(r))
         n_p += 1
+    rollups.rebuild(conn)
     row = conn.execute("SELECT value FROM settings WHERE key = 'timezone'").fetchone()
     tz = json.loads(row["value"]) if row else "Europe/London"
     from collections import deque

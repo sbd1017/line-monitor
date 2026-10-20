@@ -1043,6 +1043,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if stop_status.wait(statusfile.STATUS_EVERY_S):
                 return
 
+    def warm_tests():
+        try:                                             # load every test once, so the first page view doesn't wait for it
+            with db.read() as conn:
+                analytics.load_tests(conn, 0, 1, S(conn))
+        except Exception as exc:
+            log.warning("tests not preloaded: %s", exc)
+
+    app.router.on_startup.append(lambda: threading.Thread(target=warm_tests, name="warm-tests", daemon=True).start())
     stop_status = threading.Event()
     app.state.status_document = status_document
     if settings.status_file:

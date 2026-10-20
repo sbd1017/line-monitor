@@ -77,3 +77,24 @@ latency, sequence gaps from index counts) it's 0.48 / 0.47 / 0.46 s, the same wh
 compared with the old code on the 3-year data and are identical. Still growing with history: Summary and Evidence on
 "All" (3 years: 2.8 s and 5.0 s on the Mac). The public demo on the Pi (3 years): Live shows its first chart in 0.7 s
 and has finished loading in 1.7 to 2.4 s; Evidence for 30 days 1.8 s.
+
+### Long ranges (20 Oct 2026, not deployed yet)
+Daily probe roll-ups (migration 0004, `speedmon/rollups.py`) and the in-memory test store (`analytics._TestStore`).
+Same synthetic databases, checkpointed, plus a 3-year demo database (`demo/generate.py`: two packages, owner flags,
+fractional loss values). Mac, fresh result cache, best of 3, process already running:
+
+| Request | 1 year before / after | 2 years | 3 years | 3-year demo |
+|---|---|---|---|---|
+| Summary, All | 0.54 / 0.23 s | 2.06 / 0.46 s | 2.89 / 0.71 s | 3.25 / 0.67 s |
+| Evidence, All | 1.81 / 0.42 s | 4.09 / 0.68 s | 8.25 / 1.09 s | 8.73 / 1.11 s |
+| Summary, 1 year | 0.49 / 0.23 s | 0.48 / 0.21 s | 0.49 / 0.21 s | 0.46 / 0.20 s |
+| Evidence, 1 year | 1.75 / 0.37 s | 1.33 / 0.34 s | 1.40 / 0.34 s | 1.26 / 0.40 s |
+| Timeline / heatmap / congestion, All | 0.25 / 0.26 / 0.21 → 0.05 / 0.04 / 0.03 s | 0.53 / 0.42 / 0.45 → 0.08 / 0.08 / 0.06 s | 0.68 / 0.73 / 0.70 → 0.12 / 0.12 / 0.09 s | 0.59 / 0.77 / 0.60 → 0.09 / 0.12 / 0.09 s |
+
+Every figure of summary, evidence, timeline, heatmap, congestion, anomalies, DNA and daily for All, 1 year and 30 days,
+and the calendar, was compared with the old code on all four databases: identical. `tests/test_rollups.py` covers the
+cases synthetic data doesn't (band edges, fractional loss, missing values, late diagnostics, flags, package and time
+zone changes, a test delivered out of order, a fresh database at the same path, stale roll-ups). What still grows with
+history is the Python statistics over the tests themselves (about 13 µs a test). After a restart the store loads every
+test once in the background (0.8 s for 3 years); it holds about 23 MB for 3 years. Migration 0004 took 12 s on
+3 years of probes and adds 6% to the database (two indexes on the round-trip times).

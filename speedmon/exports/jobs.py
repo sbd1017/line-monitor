@@ -17,7 +17,7 @@ import traceback
 import uuid as uuidlib
 from pathlib import Path
 
-from .. import analytics, integrity, quality, settings_store, timeutil
+from .. import analytics, integrity, quality, rollups, settings_store, timeutil
 from ..config import VERSION
 
 FORMATS = ("xlsx", "csv", "csv.gz", "zip")
@@ -37,20 +37,10 @@ def validate_params(body: dict) -> dict:
 # ---------------------------------------------------------------- report figures
 
 def probe_latency(conn, a: int, b: int) -> dict:
-    # One pass over the period's probes for both round-trip columns (half the time of a query per column).
-    rows = conn.execute("SELECT ext_rtt_ms, gw_rtt_ms FROM probes WHERE t_ms >= ? AND t_ms < ?", (a, b)).fetchall()
-    ext = sorted(e for e, _ in rows if e is not None)
-    gw = sorted(g for _, g in rows if g is not None)
-    del rows
-    row = conn.execute("SELECT count(*), avg(ext_loss_pct), max(ext_loss_pct), sum(ext_loss_pct > 0), "
-                       "sum(state IN ('wan_down','dns_fail')), sum(state IN ('lan_fault','link_down')), "
-                       "sum(dns_ok = 0) FROM probes WHERE t_ms >= ? AND t_ms < ?", (a, b)).fetchone()
-    pct = analytics.percentile
-    return {"n": row[0], "ext_median": pct(ext, 50), "ext_p95": pct(ext, 95) if len(ext) >= 20 else None,
-            "ext_min": ext[0] if ext else None, "ext_max": ext[-1] if ext else None,
-            "gw_median": pct(gw, 50), "gw_p95": pct(gw, 95) if len(gw) >= 20 else None,
-            "loss_avg": row[1], "loss_max": row[2], "probes_with_loss": row[3], "probes_outage": row[4] or 0,
-            "probes_local": row[5] or 0, "dns_failures": row[6] or 0}
+    """Probe round-trip and loss figures for [a, b): exact medians/P95 (percentile rule as for tests), min/max, loss
+    average and counts. Whole days come from the probe roll-ups (speedmon/rollups.py), so this costs about the same
+    for a month or for years; the figures are identical to reading every probe."""
+    return rollups.latency(conn, a, b, analytics.percentile_of)
 
 
 def report_data(conn, s: dict, a: int, b: int, label: str) -> dict:

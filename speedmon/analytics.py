@@ -14,12 +14,15 @@ Statistical conventions (also stated in the exported Methodology sheet):
 """
 from __future__ import annotations
 
+import bisect
+import json
 import math
 import statistics
+import threading
 from collections import defaultdict
 from dataclasses import dataclass
 
-from . import quality, settings_store, timeutil
+from . import quality, rollups, settings_store, timeutil
 
 WAN_FAILURES = {"wan_down", "dns_fail"}                       # the Internet itself was unreachable
 LOCAL_FAILURES = {"lan_fault", "link_down", "interrupted", "agent_error"}   # the Pi/LAN/monitor side, not the ISP
@@ -50,6 +53,7 @@ class T:
     dow: int = 0
     minute: int = 0
     q: tuple = ()                                                # quality codes (speedmon/quality.py)
+    mid: int = 0                                                 # measurements.id
 
     @property
     def clean(self) -> bool:
@@ -72,30 +76,113 @@ class T:
 
 def load_tests(conn, from_ms: int, to_ms: int, settings: dict, include_excluded: bool = False,
                include_legacy: bool | None = None) -> list[T]:
+    """Tests in [from_ms, to_ms) in time order, from the store of every loaded test (see _TestStore), so a long period
+    costs a slice of a list rather than re-reading and re-assessing years of tests on every request."""
     legacy = settings.get("include_legacy") if include_legacy is None else include_legacy
-    sources = ("agent", "synthetic", "legacy_csv", "legacy_xlsx") if legacy else ("agent", "synthetic")
-    excluded = {r[0] for r in conn.execute(
+    sources = {"agent", "synthetic", "legacy_csv", "legacy_xlsx"} if legacy else {"agent", "synthetic"}
+    if conn.in_transaction:                                  # uncommitted rows must never reach the shared store
+        tests = _load_rows(conn, "WHERE m.t_ms >= ? AND m.t_ms < ?", (from_ms, to_ms), settings, _excluded(conn), {})
+    else:
+        tests, keys = _TestStore.of(conn).tests(conn, settings)
+        tests = tests[bisect.bisect_left(keys, from_ms):bisect.bisect_left(keys, to_ms)]
+    return [x for x in tests if x.source in sources and (include_excluded or not x.excluded)]
+
+
+_LOAD_SQL = (f"SELECT m.t_ms, m.uuid, m.status, m.download_mbps, m.upload_mbps, m.ping_ms, m.jitter_ms, m.packet_loss_pct, "
+             f"m.kind, m.source, m.failure_code, m.server_id, m.related_uuid, m.id, {', '.join(quality.SQL_COLUMNS)} "
+             f"FROM measurements m LEFT JOIN diagnostics d ON d.measurement_uuid = m.uuid ")
+
+
+def _excluded(conn) -> set:
+    return {r[0] for r in conn.execute(
         "SELECT measurement_uuid FROM measurement_flags WHERE flag = 'exclude' AND revoked_at IS NULL")}
+
+
+def _load_rows(conn, where: str, args: tuple, settings: dict, excluded: set, strings: dict) -> list[T]:
+    """Build T objects (local time parts, package, quality codes) for the measurements matching `where`. A test
+    with two diagnostics rows uses the first one stored."""
     clock = timeutil.LocalClock(settings["timezone"])
     pkc = settings_store.PackageClock(settings.get("packages"), settings["timezone"])
-    out = []
-    q = (f"SELECT m.t_ms, m.uuid, m.status, m.download_mbps, m.upload_mbps, m.ping_ms, m.jitter_ms, m.packet_loss_pct, "
-         f"m.kind, m.source, m.failure_code, m.server_id, m.related_uuid, {', '.join(quality.SQL_COLUMNS)} FROM measurements m "
-         f"LEFT JOIN diagnostics d ON d.measurement_uuid = m.uuid WHERE m.t_ms >= ? AND m.t_ms < ? AND m.source IN "
-         f"({','.join('?' * len(sources))}) ORDER BY m.t_ms, m.id")
-    seen = set()
-    for r in conn.execute(q, (from_ms, to_ms, *sources)):
+    s_ = lambda v: v if v is None else strings.setdefault(v, v)          # one copy of each repeated string
+    out, seen = [], set()
+    for r in conn.execute(_LOAD_SQL + where + " ORDER BY m.t_ms, m.id, d.id", args):
         if r[1] in seen:                                         # a second diagnostics row for the same test
             continue
         seen.add(r[1])
-        x = T(r[0], r[1], r[2] == "ok", r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[1] in excluded, r[12])
-        if x.excluded and not include_excluded:
-            continue
+        x = T(r[0], r[1], r[2] == "ok", r[3], r[4], r[5], r[6], r[7], s_(r[8]), s_(r[9]), s_(r[10]), s_(r[11]),
+              r[1] in excluded, r[12], mid=r[13])
         x.day, x.hour, x.dow, x.minute = clock.parts(x.t)
         x.pk = pkc.at(x.t)
-        x.q = quality.assess(x.ok, x.source, x.kind, x.dl, x.pk, r[13:])
+        x.q = quality.assess(x.ok, x.source, x.kind, x.dl, x.pk, r[14:])
         out.append(x)
     return out
+
+
+class _TestStore:
+    """Every test in one database as T objects (all sources, flagged ones marked), kept in time order between
+    requests. Each use checks, in one read snapshot, what changed since: new measurements and diagnostics are
+    loaded on their own (a diagnostics row arriving after its test reloads that test); a new or revoked flag, a
+    different time zone or package history, or a different database (a fresh start) reloads everything. The
+    objects are shared and never changed after loading."""
+    _all: dict = {}
+    _lock = threading.Lock()
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.list: list[T] = []
+        self.keys: list[int] = []
+        self.state = None                                        # (fingerprint, flags, (mid, uuid), (did, uuid))
+        self.strings: dict = {}
+
+    @classmethod
+    def of(cls, conn) -> "_TestStore":
+        path = next((r[2] for r in conn.execute("PRAGMA database_list") if r[1] == "main"), "") or f"memory:{id(conn)}"
+        with cls._lock:
+            st = cls._all.get(path)
+            if st is None:
+                if len(cls._all) >= 4:                           # tests open many short-lived databases
+                    cls._all.pop(next(iter(cls._all)))
+                st = cls._all[path] = cls()
+            return st
+
+    def tests(self, conn, settings: dict) -> tuple[list[T], list[int]]:
+        """(every test in time order, their t_ms) as of now."""
+        with self.lock:
+            conn.execute("BEGIN")                                # one snapshot for the checks and the loading
+            try:
+                self._refresh(conn, settings)
+            finally:
+                conn.execute("COMMIT")
+            return self.list, self.keys
+
+    def _refresh(self, conn, settings: dict) -> None:
+        fp = (settings["timezone"], json.dumps(settings.get("packages"), sort_keys=True))
+        flags = tuple(conn.execute("SELECT coalesce(max(id), 0), count(revoked_at) FROM measurement_flags").fetchone())
+        last_m = tuple(conn.execute("SELECT id, uuid FROM measurements ORDER BY id DESC LIMIT 1").fetchone() or (0, ""))
+        last_d = tuple(conn.execute("SELECT id, uuid FROM diagnostics ORDER BY id DESC LIMIT 1").fetchone() or (0, ""))
+        old = self.state
+        if old and old[:2] == (fp, flags) and (old[2], old[3]) == (last_m, last_d):
+            return
+        same_rows = old and all(r[0] == 0 or tuple(conn.execute(f"SELECT uuid FROM {t} WHERE id = ?", (r[0],)).fetchone() or ()) == (r[1],)
+                                for t, r in (("measurements", old[2]), ("diagnostics", old[3])))
+        excluded = _excluded(conn)
+        if not old or old[:2] != (fp, flags) or not same_rows or last_m[0] < old[2][0] or last_d[0] < old[3][0]:
+            self.strings = {}
+            tests = _load_rows(conn, "", (), settings, excluded, self.strings)
+        else:
+            fresh = {x.mid: x for x in _load_rows(conn, "WHERE m.id > ?", (old[2][0],), settings, excluded, self.strings)}
+            if last_d[0] > old[3][0]:                            # tests whose diagnostics arrived since
+                fresh.update((x.mid, x) for x in _load_rows(
+                    conn, "WHERE m.uuid IN (SELECT measurement_uuid FROM diagnostics WHERE id > ?)", (old[3][0],),
+                    settings, excluded, self.strings))
+            key = lambda x: (x.t, x.mid)
+            new = sorted(fresh.values(), key=key)
+            tests = [x for x in self.list if x.mid not in fresh]
+            if tests and new and key(tests[-1]) > key(new[0]):    # something older arrived late
+                tests = sorted(tests + new, key=key)
+            else:
+                tests += new
+        self.list, self.keys, self.state = tests, [x.t for x in tests], (fp, flags, last_m, last_d)
 
 
 def excluded_count(conn, from_ms: int, to_ms: int, settings: dict) -> int:
@@ -142,15 +229,21 @@ def data_bounds(conn, settings: dict) -> dict:
 # ---------------------------------------------------------------- basic statistics
 
 def percentile(sorted_vals: list, p: float) -> float | None:
-    n = len(sorted_vals)
+    return percentile_of(len(sorted_vals), p, sorted_vals.__getitem__)
+
+
+def percentile_of(n: int, p: float, kth) -> float | None:
+    """The percentile rule, given the sample size and kth(i), the i-th smallest value (0-based). percentile() and the
+    probe roll-ups (which find the k-th value without sorting every probe) both use it, so they agree exactly."""
     if n == 0:
         return None
     if n == 1:
-        return sorted_vals[0]
+        return kth(0)
     k = (n - 1) * p / 100
     lo = math.floor(k)
     hi = min(lo + 1, n - 1)
-    return sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * (k - lo)
+    v = kth(lo)
+    return v + (kth(hi) - v) * (k - lo)
 
 
 def describe(values: list) -> dict:
@@ -519,22 +612,25 @@ def rank_groups(rows: list[dict], min_n: int = 5) -> dict:
 def rolling_extremes(tests: list[T], window_ms: int, min_n: int) -> dict:
     """Best and worst mean download over any window [t, t + window) that starts at a test and holds >= min_n
     successful tests. Labelled as rolling averages of sampled tests."""
-    ok = [x for x in tests if x.ok]
+    ts = [x.t for x in tests if x.ok]
+    dl = [x.dl for x in tests if x.ok]
     best = worst = None
-    j, total = 0, 0.0
-    for i, x in enumerate(ok):
-        while j < len(ok) and ok[j].t < x.t + window_ms:
-            total += ok[j].dl
+    j, total, m = 0, 0.0, len(ts)
+    for i, t in enumerate(ts):
+        while j < m and ts[j] < t + window_ms:
+            total += dl[j]
             j += 1
         n = j - i
         if n >= min_n:
             mean = total / n
-            item = {"start_ms": x.t, "end_ms": x.t + window_ms, "first_ms": x.t, "last_ms": ok[j - 1].t, "n": n, "mean": mean}
-            if best is None or mean > best["mean"]:
-                best = item
-            if worst is None or mean < worst["mean"]:
-                worst = item
-        total -= x.dl
+            new_best, new_worst = best is None or mean > best["mean"], worst is None or mean < worst["mean"]
+            if new_best or new_worst:
+                item = {"start_ms": t, "end_ms": t + window_ms, "first_ms": t, "last_ms": ts[j - 1], "n": n, "mean": mean}
+                if new_best:
+                    best = item
+                if new_worst:
+                    worst = item
+        total -= dl[i]
     return {"best": best, "worst": worst, "min_n": min_n}
 
 
@@ -908,9 +1004,7 @@ def coverage(conn, from_ms: int, to_ms: int, s: dict, tests: list[T]) -> dict:
     b = min(to_ms, now)
     out = {"probe_minutes": 0, "expected_minutes": 0, "pct": None, "tests_expected": None, "tests_scheduled": None}
     if a is not None and b > a:
-        rows = conn.execute("SELECT count(*), coalesce(sum(min(interval_s, 600)), 0) FROM probes WHERE t_ms >= ? AND t_ms < ?",
-                            (a, b)).fetchone()
-        out["probe_minutes"] = rows[1] / 60
+        out["probe_minutes"] = rollups.watched_seconds(conn, a, b) / 60
         out["expected_minutes"] = (b - a) / 60000
         out["pct"] = min(100.0, 100 * out["probe_minutes"] / out["expected_minutes"]) if out["expected_minutes"] else None
         out["monitoring_from_ms"] = a

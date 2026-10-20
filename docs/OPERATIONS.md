@@ -40,6 +40,7 @@ Each start records an `agent_start` event saying whether the Pi rebooted and whe
 | `SPEEDMON_DATA_DIR` | `$APP/var` | database, entrance hash, backups, exports |
 | `SPEEDMON_HOST` / `SPEEDMON_PORT` | 127.0.0.1 / 8772 | listen address (loopback only) |
 | `SPEEDMON_AGENT_KEY_FILE` | (systemd credential `agent-key`) | HMAC key file, for development only |
+| `SITE_AUTH` | (unset: phrase entrance) | `1` = trust the central owner login headers from nginx (`speedmon/site_auth.py`); production sets it in the drop-in `speedmon.service.d/site-auth.conf` |
 | `SPEEDMON_STATUS_FILE` | (unset: not written) | public-safe status for other apps; production `/run/speedmon/status.json` |
 | `SPEEDAGENT_ID` | pi | agent name in every record |
 | `SPEEDAGENT_STATE_DIR` | /var/lib/speedagent | outbox, policy state, engine HOME |

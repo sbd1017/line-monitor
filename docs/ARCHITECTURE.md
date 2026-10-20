@@ -72,6 +72,9 @@ schema source of truth.
 | `settings`, `settings_history` | config | every change recorded |
 | `sessions`, `audit_log`, `commands`, `agent_status`, `exports` | housekeeping | |
 | `derived_measurement`, `rollup_probe_hourly` | derived | anomaly scores and hourly probe roll-ups; `python -m speedmon.cli rebuild-derived` recreates them |
+| `rollup_probe_daily`, `rollup_probe_loss`, `rollup_probe_rtt` | derived | per-day probe counts, watched seconds, loss values and round-trip value bands (`speedmon/rollups.py`), so coverage and the Evidence latency block over months or years read about 150 roll-up rows a day instead of 1,440 probes, with exactly the figures reading every probe gives; `rebuild-derived` recreates them too |
+
+Long periods: whole UTC days come from the daily probe roll-ups and only the partial days at either end are read from `probes`; a percentile counts through the value bands, then reads the one band that holds it (indexes `probes_ext_rtt`, `probes_gw_rtt`). If a band's count disagrees with the probes, the figure is read directly instead and a warning logged. Tests are kept in memory between requests (`analytics._TestStore`): each request loads only the measurements and diagnostics added since, and reloads everything after a flag, package or time zone change or a fresh start.
 
 Times are UTC (`t_ms` epoch ms, indexed, plus ISO text). Grouping by day/hour uses `Europe/London` with
 correct DST handling (`timeutil.LocalClock`).
