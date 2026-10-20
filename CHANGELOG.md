@@ -2,6 +2,17 @@
 
 What changed in each release of Line Monitor, newest first.
 
+## v1.5.0 - 2026-10-20
+
+- A public demo (demo/): three years of generated history for a made-up line, kept running by a minute-by-minute simulation, with a nightly reset and read-only settings
+- Central sign-in: the app can trust a site-wide login in front of it (speedmon/site_auth.py), off unless SITE_AUTH=1
+- Faster pages with years of history: the dashboard no longer scans every probe on each request, Evidence reads probe latency in one pass, and the integrity check uses index counts
+- Testing notes: timings at one, two and three years of data
+- Long periods are much faster: per-day probe summaries (exact, rebuildable) and an in-memory store of tests, so All-time Evidence and Summary no longer re-read years of data
+- The average probe loss is now computed exactly on every SQLite version
+- Code cleanup, no behaviour change: one shared download-band rule (was written out four times), clearer names (Measurement, requested_period), dead helpers, constants and CSS removed, repeated inline styles moved to CSS
+- Cached pages refresh when a test's diagnostics arrive, so a test no longer shows as Not verified until the next one
+
 ## v1.4.0 - 2026-10-18
 
 - Live: a small floating section bar (Live, History, Promise, Reliability, Patterns, DNA) that follows your scroll position, jumps to each section, and gives each one a shareable link such as /speedtest/#reliability
