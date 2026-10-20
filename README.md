@@ -9,6 +9,18 @@ It's written around a UK Virgin Media Gig1 line (1,130 Mbps advertised, 565 Mbps
 package figures are settings. Any connection works, and you can keep a history of packages, so an upgrade
 doesn't change how older results are judged.
 
+## Live demo
+
+**[mubar.uk/speedtest](https://mubar.uk/speedtest/)**: open it and look around, no sign-in needed.
+
+- It shows three years of generated results for a made-up Virgin Media line, upgraded from M350 to Gig1
+  partway through, with outages, a fault week and evening slowdowns built in.
+- It keeps running. New results arrive every minute as if the monitor were live, and "Run a test now" adds
+  one. No real speed tests are run.
+- Settings, notes and pausing are read-only.
+- Exports work (a full three-year XLSX takes about two minutes) and are deleted after two hours.
+- The data goes back to its starting point every night at 04:00 UK time.
+
 ![The Live page: latest test, the gauge and the line's status](docs/screenshots/live.png)
 
 <table>
