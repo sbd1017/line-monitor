@@ -1,0 +1,9 @@
+[Unit]
+Description=Line Monitor demo: pre-build the generated data before the 04:00 reset
+
+[Timer]
+OnCalendar=*-*-* 03:40:00 Europe/London
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

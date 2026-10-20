@@ -1,0 +1,54 @@
+[Unit]
+Description=Line Monitor public demo (generated data) on 127.0.0.1:8921
+After=network.target
+
+[Service]
+Type=simple
+User=demo
+Group=demo
+WorkingDirectory=/opt/demos/speedtest/app
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=SPEEDMON_ENV=development
+Environment=SPEEDMON_HOST=127.0.0.1
+Environment=SPEEDMON_PORT=8921
+Environment=SPEEDMON_DATA_DIR=/srv/demos/speedtest
+# SPEEDMON_PUBLIC_ORIGINS (the public https origin) is set by install.sh
+EnvironmentFile=/opt/demos/speedtest/demo.env
+ExecStart=/opt/demos/speedtest/venv/bin/python -m demo.serve
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+UMask=0077
+Nice=5
+CPUQuota=150%
+MemoryMax=900M
+TasksMax=48
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/demos/speedtest
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+RemoveIPC=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Reached only through the local reverse proxy; it talks to nothing.
+IPAddressDeny=any
+IPAddressAllow=localhost
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target

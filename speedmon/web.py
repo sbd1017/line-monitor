@@ -30,6 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import analytics, auth, canonical, ingest, integrity, quality, series, settings_store, statusfile, timeutil
+from . import site_auth
 from .config import VERSION, Settings, load_settings
 from .db import Database
 from .exports import jobs as export_jobs
@@ -64,6 +65,7 @@ class TTLCache:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
+    central_auth = site_auth.enabled()
     settings.data_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     db = Database(settings.db_path)
     db.migrate()
@@ -198,11 +200,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except Exception as exc:
                 log.error("agent request failed: %s", type(exc).__name__)
                 return headers(JSONResponse({"error": "server error"}, status_code=500))
-        session = sessions.lookup(request.cookies.get(COOKIE))
+        session = site_auth.session_from_proxy(request) if central_auth else sessions.lookup(request.cookies.get(COOKIE))
+        if central_auth and session is None:
+            return headers(JSONResponse({"error": "Site authentication required"}, status_code=401))
         request.state.session = session
         public = path == ENTRANCE or (path.startswith(ENTRANCE_ASSETS) and ".." not in path)
         if session is None and not public:
             return headers(not_signed_in(request))
+        if central_auth and path == BASE + "/enter":
+            if request.method in ("GET", "HEAD"):
+                return headers(RedirectResponse(BASE + "/", status_code=303))
+            return headers(PlainTextResponse("Use the site login", status_code=405))
         if request.method == "POST":
             body = await request.body()
             if len(body) > 256 * 1024:
@@ -252,8 +260,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     raise ValueError("empty range")
                 return a, b, f"{timeutil.fmt_local(a, s['timezone'])} to {timeutil.fmt_local(b, s['timezone'])}"
             return timeutil.resolve_range("custom", s["timezone"], q[prefix + "from"], q[prefix + "to"])
-        first = analytics.data_bounds(conn, s)["first_ms"]
-        return timeutil.resolve_range(preset, s["timezone"], first_ms=first)
+        return timeutil.resolve_range(preset, s["timezone"], first_ms=analytics.first_ms(conn, s))
 
     def rkey(request: Request, prefix: str = "") -> tuple:
         """Cache key for a requested period: presets relative to "now" are reused for 10 minutes (and until new data
@@ -316,6 +323,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post(BASE + "/leave")
     def leave(request: Request):
+        if central_auth:
+            return RedirectResponse("/logout", status_code=303)
         sessions.end(request.cookies.get(COOKIE))
         resp = RedirectResponse(ENTRANCE, status_code=303)
         resp.delete_cookie(COOKIE, path=BASE)

@@ -83,20 +83,28 @@ def sequence_gaps(conn, agent_outbox_floor: dict | None = None) -> list[dict]:
     union = " UNION ".join(f"SELECT DISTINCT agent_id FROM {t} WHERE agent_seq IS NOT NULL" for t in STREAM_TABLE.values())
     agents = [r[0] for r in conn.execute(union)]
     for agent in sorted(set(agents)):
-        seqs = []
+        first = last = None
+        received = 0
         for table in STREAM_TABLE.values():
-            seqs += [r[0] for r in conn.execute(f"SELECT agent_seq FROM {table} WHERE agent_id = ? AND agent_seq IS NOT NULL",
-                                                 (agent,))]
-        if not seqs:
+            w = f"FROM {table} WHERE agent_id = ? AND agent_seq IS NOT NULL"
+            lo, hi, n = conn.execute(f"SELECT (SELECT min(agent_seq) {w}), (SELECT max(agent_seq) {w}), (SELECT count(*) {w})",
+                                     (agent, agent, agent)).fetchone()
+            if n:
+                first, last = (lo if first is None else min(first, lo)), (hi if last is None else max(last, hi))
+                received += n
+        if not received:
             continue
-        seqs.sort()
         gaps, total = [], 0
-        for a, b in zip(seqs, seqs[1:]):
-            if b - a > 1:
+        if last - first + 1 != received:          # something is missing (or repeated): walk the numbers in order
+            union = " UNION ALL ".join(f"SELECT agent_seq AS s FROM {t} WHERE agent_id = ? AND agent_seq IS NOT NULL"
+                                       for t in STREAM_TABLE.values())
+            rows = conn.execute(f"SELECT p, s FROM (SELECT lag(s) OVER (ORDER BY s) AS p, s FROM ({union})) WHERE s - p > 1",
+                                (agent,) * len(STREAM_TABLE))
+            for a, b in rows:
                 total += b - a - 1
                 if len(gaps) < 20:
                     gaps.append([a + 1, b - 1])
         quarantined = conn.execute("SELECT count(*) FROM quarantine WHERE agent_id = ?", (agent,)).fetchone()[0]
-        out.append({"agent_id": agent, "first": seqs[0], "last": seqs[-1], "received": len(seqs), "missing": total,
+        out.append({"agent_id": agent, "first": first, "last": last, "received": received, "missing": total,
                     "gaps": gaps, "quarantined": quarantined})
     return out

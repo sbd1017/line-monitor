@@ -1,0 +1,15 @@
+#!/bin/sh
+# Nightly reset of the Line Monitor demo. Runs as the demo user with the web app and the minute updater stopped
+# (DEMO_DIR is the data folder). Uses the data pre-built at 03:40 if it's there and verified, otherwise builds it now
+# (about seven minutes), then swaps it in and catches up to the current minute.
+set -eu
+APP=${DEMO_APP:-/opt/demos/speedtest}
+export SPEEDMON_DATA_DIR="${DEMO_DIR:-/srv/demos/speedtest}"
+PY="$APP/venv/bin/python"
+cd "$APP/app"
+today=$(TZ=Europe/London date +%F)
+if [ "$(cat "$SPEEDMON_DATA_DIR/speedmon.sqlite3.new.ok" 2>/dev/null)" != "$today" ]; then
+  "$PY" -m demo.generate --no-swap --verify
+fi
+"$PY" -m demo.generate --swap-only
+"$PY" -m demo.tick

@@ -1,0 +1,9 @@
+[Unit]
+Description=Line Monitor demo: new generated results every minute
+
+[Timer]
+OnCalendar=*:*:05
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

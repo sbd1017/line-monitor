@@ -105,11 +105,33 @@ def excluded_count(conn, from_ms: int, to_ms: int, settings: dict) -> int:
                         f"AND m.source IN ({','.join('?' * len(sources))})", (from_ms, to_ms, *sources)).fetchone()[0]
 
 
+def _span(conn, sources: tuple) -> tuple:
+    """(first t_ms, last t_ms, count) of the given sources, each an index lookup on (source, t_ms)."""
+    lo, hi, n = None, None, 0
+    for src in sources:
+        a, b, c = conn.execute("SELECT (SELECT min(t_ms) FROM measurements WHERE source = ?), "
+                               "(SELECT max(t_ms) FROM measurements WHERE source = ?), "
+                               "(SELECT count(*) FROM measurements WHERE source = ?)", (src, src, src)).fetchone()
+        if a is not None:
+            lo, hi = (a if lo is None else min(lo, a)), (b if hi is None else max(hi, b))
+        n += c
+    return lo, hi, n
+
+
+def first_ms(conn, settings: dict) -> int | None:
+    """Start of the data (what "All" means): the first test, or the first legacy row when those are included."""
+    srcs = ("agent", "synthetic") + (("legacy_csv", "legacy_xlsx") if settings.get("include_legacy") else ())
+    vals = [conn.execute("SELECT min(t_ms) FROM measurements WHERE source = ?", (s,)).fetchone()[0] for s in srcs]
+    vals = [v for v in vals if v is not None]
+    return min(vals) if vals else None
+
+
 def data_bounds(conn, settings: dict) -> dict:
     legacy = settings.get("include_legacy")
-    r = conn.execute("SELECT min(t_ms), max(t_ms), count(*) FROM measurements WHERE source IN ('agent','synthetic')").fetchone()
-    lg = conn.execute("SELECT min(t_ms), max(t_ms), count(*) FROM measurements WHERE source LIKE 'legacy%'").fetchone()
-    p = conn.execute("SELECT min(t_ms), max(t_ms) FROM probes").fetchone()
+    r = _span(conn, ("agent", "synthetic"))
+    lg = _span(conn, ("legacy_csv", "legacy_xlsx"))
+    # min() and max() in one SELECT make SQLite scan the whole index; as separate sub-queries each is one lookup.
+    p = conn.execute("SELECT (SELECT min(t_ms) FROM probes), (SELECT max(t_ms) FROM probes)").fetchone()
     first = r[0]
     if legacy and lg[0] is not None:
         first = lg[0] if first is None else min(first, lg[0])

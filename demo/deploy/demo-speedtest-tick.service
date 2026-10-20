@@ -1,0 +1,33 @@
+[Unit]
+Description=Line Monitor demo: add the generated results that fell due (no real tests)
+After=demo-speedtest.service
+
+[Service]
+Type=oneshot
+User=demo
+Group=demo
+WorkingDirectory=/opt/demos/speedtest/app
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=SPEEDMON_DATA_DIR=/srv/demos/speedtest
+ExecStart=/opt/demos/speedtest/venv/bin/python -m demo.tick
+TimeoutStartSec=120
+UMask=0077
+Nice=10
+CPUQuota=50%
+MemoryMax=300M
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+PrivateNetwork=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/demos/speedtest
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service

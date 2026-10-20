@@ -68,3 +68,12 @@ slower than the Mac. The real-data XLSX (34,490 rows) took under 30 s on the Pi.
 
 Two tests were cut short by my own deployment work before these fixes (21:19 and 21:23 UTC on 16 Oct: `exit -15`
 and `exit -10`). They stay in the raw data as recorded.
+
+### History length (20 Oct 2026)
+Synthetic 1, 2 and 3 years (30-minute tests, minute probes: 3 years is 55k tests and 1.6M probes, 1.24 GB), every
+API call cold, on the Mac. Before the fixes the default Live page (7 days) took 0.56 / 0.74 / 1.56 s, because every
+request scanned the whole probe index for the data bounds. After (bounds as single index lookups, one pass for probe
+latency, sequence gaps from index counts) it's 0.48 / 0.47 / 0.46 s, the same whatever the history. Results were
+compared with the old code on the 3-year data and are identical. Still growing with history: Summary and Evidence on
+"All" (3 years: 2.8 s and 5.0 s on the Mac). The public demo on the Pi (3 years): Live shows its first chart in 0.7 s
+and has finished loading in 1.7 to 2.4 s; Evidence for 30 days 1.8 s.
