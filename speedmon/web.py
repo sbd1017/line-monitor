@@ -8,6 +8,9 @@ Boundary (``boundary`` middleware, runs before every route):
     whether or not it exists: GET -> 303 to /speedtest/enter, anything else -> 401. No handler runs.
   * Every POST needs a same-site Origin/Referer (when sent) and the session's CSRF token.
   * Every response: strict CSP (scripts and styles from this origin only), no-store, noindex, no framing.
+With SITE_AUTH=1 the central-login headers count only alongside this app's proxy key (X-Site-Proxy-Key, from
+a root-only nginx snippet), so another process on the Pi can't pose as the owner; production refuses to start
+without the key.
 Private values never leave the server: no IP addresses (public or internal), no paths, no keys.
 """
 from __future__ import annotations
@@ -65,6 +68,8 @@ class TTLCache:
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     central_auth = site_auth.enabled()
+    if settings.is_production and central_auth and site_auth.proxy_key() is None:
+        raise SystemExit("Refusing to start in production without the site proxy key (LoadCredential site-proxy-key)")
     settings.data_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     db = Database(settings.db_path)
     db.migrate()

@@ -41,6 +41,7 @@ Each start records an `agent_start` event saying whether the Pi rebooted and whe
 | `SPEEDMON_HOST` / `SPEEDMON_PORT` | 127.0.0.1 / 8772 | listen address (loopback only) |
 | `SPEEDMON_AGENT_KEY_FILE` | (systemd credential `agent-key`) | HMAC key file, for development only |
 | `SITE_AUTH` | (unset: phrase entrance) | `1` = trust the central owner login headers from nginx (`speedmon/site_auth.py`); production sets it in the drop-in `speedmon.service.d/site-auth.conf` |
+| proxy key | `/etc/speedmon/site-proxy-key` + `/etc/nginx/snippets/site-speedtest-proxy-key.conf` (root 0600, same value; `sudo scripts/site-proxy-key.sh`). nginx sends it as `X-Site-Proxy-Key`; with `SITE_AUTH=1` the app ignores the login headers without it and production refuses to start. Rotate: delete both files, re-run the script, `systemctl reload nginx`, restart speedmon |
 | `SPEEDMON_STATUS_FILE` | (unset: not written) | public-safe status for other apps; production `/run/speedmon/status.json` |
 | `SPEEDAGENT_ID` | pi | agent name in every record |
 | `SPEEDAGENT_STATE_DIR` | /var/lib/speedagent | outbox, policy state, engine HOME |
