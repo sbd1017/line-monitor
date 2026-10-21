@@ -30,7 +30,10 @@ function parse() {
 
 let routed = null;                                   // path + query of the view on screen
 
+let navigation = 0;                                 // only the latest navigation may draw (see route)
+
 export async function route() {
+  const mine = ++navigation;
   routed = location.pathname + location.search;
   const [name, params] = parse();
   for (const a of document.querySelectorAll('.tabs a')) {
@@ -38,10 +41,16 @@ export async function route() {
     if (a.hasAttribute('aria-current')) a.setAttribute('aria-current', 'page');
   }
   current?.destroy?.();
+  current = null;
   const view = document.getElementById('view');
   clear(view);
+  // A second navigation can start while this one waits for its module or data (a double click, Back pressed
+  // quickly). Without these checks both views would draw into the page, one below the other.
   const mod = await VIEWS[name]();
-  current = await mod.mount(view, params);
+  if (mine !== navigation) return;
+  const mounted = await mod.mount(view, params);
+  if (mine !== navigation) { mounted?.destroy?.(); return; }
+  current = mounted;
   document.title = `${({ live: 'Live', day: params.day })[name] || name[0].toUpperCase() + name.slice(1)} · Line Monitor`;
 }
 
