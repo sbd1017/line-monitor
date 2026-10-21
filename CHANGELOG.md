@@ -2,6 +2,10 @@
 
 What changed in each release of Line Monitor, newest first.
 
+## v1.6.0 - 2026-10-21
+
+- Pages can no longer appear twice when a navigation starts while another is still loading (double click, quick Back)
+
 ## v1.5.0 - 2026-10-20
 
 - A public demo (demo/): three years of generated history for a made-up line, kept running by a minute-by-minute simulation, with a nightly reset and read-only settings
