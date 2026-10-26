@@ -5,7 +5,7 @@
 # The key never appears on a command line. Rotate: delete both files and run this again.
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
-install -d -m 0700 -o root -g root /etc/speedmon
+[ -d /etc/speedmon ] || install -d -m 0700 -o root -g root /etc/speedmon   # never re-mode an existing one
 python3 - <<'PY'
 import os, secrets
 key_path, snip_path = "/etc/speedmon/site-proxy-key", "/etc/nginx/snippets/site-speedtest-proxy-key.conf"

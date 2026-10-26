@@ -63,6 +63,17 @@ def test_probes_every_minute_and_no_probe_during_a_test():
     assert seqs == list(range(1, len(seqs) + 1))
 
 
+def test_minute_probe_on_a_tests_first_ms_keeps_its_own_uuid():
+    """25 May 2026 18:56:00.013 UTC (anchor 22 Oct 2026): the 18:56 minute probe's jitter put it on the very ms a test
+    started, and the pre-test probe there drew the same uuid, so the nightly build failed on probes.uuid."""
+    w = World(date(2026, 10, 22), days=153)
+    clash = 1779735360013
+    _, recs = collect(w, clash + MIN)
+    probes = [r for s, r, _ in recs if s == "probe"]
+    assert len({r["uuid"] for r in probes}) == len(probes)
+    assert [r["t_ms"] for r in probes if clash <= r["t_ms"] <= clash + 1] == [clash, clash + 1]
+    assert len({r["uuid"] for _, r, _ in recs}) == len(recs)
+
 def test_evening_slower_than_morning_on_weekdays():
     w = World(date(2026, 1, 28), days=21)
     _, recs = collect(w, end_of(date(2026, 1, 28)))

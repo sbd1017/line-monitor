@@ -244,6 +244,8 @@ export async function mount(root, params) {
   const dnaRow = h('div', { class: 'dna-row' });
   page.append(section('09', 'Connection DNA', 'a fingerprint per period: spoke length = median speed per hour, ribbon = P10–P90, thickness = jitter, core ring = latency, red dots = failures · click for the numbers', dnaRow));
   const anomBox = h('div', { class: 'list' });
+  const ANOM_FEW = 3;                                     // the latest few; the rest behind Show more
+  let anomOpen = false;
   page.append(section('10', 'Anomalies', 'tests far outside what is normal for that hour and day type (robust z ≥ 3.5 against the previous 28 days)', anomBox));
 
   // ------------------------------------------------------------ data
@@ -393,10 +395,16 @@ export async function mount(root, params) {
   function renderAnomalies(an) {
     clear(anomBox);
     if (!an.items.length) { anomBox.append(h('p', { class: 'muted', text: 'No anomalous tests in this period.' })); return; }
-    for (const a of an.items.slice(0, 30)) {
+    const items = an.items.slice(0, 30);
+    for (const a of anomOpen ? items : items.slice(0, ANOM_FEW)) {
       anomBox.append(h('div', { class: 'item', onclick: () => openTest(a.uuid) }, h('span', { class: 'mono', text: fmtDT(a.t_ms) }),
         h('span', { text: `${n(a.download_mbps, 0)} Mbps against a usual ${n(a.ref_median, 0)} for that hour (${a.ref_n} reference tests)` }),
         h('span', { class: 'tag anom', text: `z ${n(a.anomaly_z, 1)}` })));
+    }
+    if (items.length > ANOM_FEW) {
+      anomBox.append(h('button', { class: 'btn small list-more', type: 'button', 'aria-expanded': String(anomOpen),
+        text: anomOpen ? 'Show fewer' : `Show ${items.length - ANOM_FEW} more`,
+        onclick: () => { anomOpen = !anomOpen; renderAnomalies(an); } }));
     }
   }
 

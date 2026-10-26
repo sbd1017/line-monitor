@@ -5,15 +5,15 @@ from speedagent import probes
 
 def run_with(monkeypatch, gw_ok=True, ext_ok=True, dns_ok=True, http_ok=True, ext_ms=11.0, carrier=True):
     def ping(host, **kw):
-        ok = gw_ok if host == "192.168.8.1" else ext_ok
-        return {"rtt_ms": (0.5 if host == "192.168.8.1" else ext_ms) if ok else None, "loss_pct": 0.0 if ok else 100.0,
+        ok = gw_ok if host == "192.168.1.1" else ext_ok
+        return {"rtt_ms": (0.5 if host == "192.168.1.1" else ext_ms) if ok else None, "loss_pct": 0.0 if ok else 100.0,
                 "sent": 4, "received": 4 if ok else 0}
     monkeypatch.setattr(probes, "ping", ping)
     monkeypatch.setattr(probes, "dns_check", lambda suffix: (dns_ok, 5.0 if dns_ok else None))
     monkeypatch.setattr(probes, "http_check", lambda url: (http_ok, 30.0 if http_ok else None))
     monkeypatch.setattr(probes.sysinfo, "link", lambda iface: {"carrier": carrier, "link_speed_mbps": 1000 if carrier else None})
     s = SimpleNamespace(anchors=("1.1.1.1", "8.8.8.8"), dns_suffix="example.com", http_check="https://x")
-    return probes.run(s, "eth0", "192.168.8.1")
+    return probes.run(s, "eth0", "192.168.1.1")
 
 
 def test_probe_states(monkeypatch):

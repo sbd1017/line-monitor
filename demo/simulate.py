@@ -229,7 +229,10 @@ class Sim:
         t_last = tf0 + self._duration(tf0, "speedtest-go", pre_kind) if fallback else t1
         if t_last > t_end:
             return None
-        pre = self._probe(emit, now)                       # the pre-test probe
+        # The pre-test probe. A minute probe's jitter can land it on this very ms, and probes are keyed on their time:
+        # this one goes a ms later so it doesn't repeat that probe's uuid.
+        clash = bool(self.last_probe) and self.last_probe.get("t") == now
+        pre = self._probe(emit, now + 1 if clash else now)
         self.next_probe = max(self.next_probe, (now // MIN + 1) * MIN)
         uid, res = self._measure(emit, kind, d.get("reason"), d.get("related"), t0, "ookla", pre, pre_kind)
         out = {"uuid": uid, "status": res["status"], "download_mbps": res.get("download_mbps"),

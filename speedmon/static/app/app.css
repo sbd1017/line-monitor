@@ -262,6 +262,7 @@ svg.viz [data-tip]:hover { filter: brightness(1.25); }
 .list .item { display: grid; grid-template-columns: 150px 1fr auto; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); align-items: center; font-size: 13px; cursor: pointer; }
 .list .item:hover { background: var(--surface-2); }
 .list.static .item { cursor: default; }                  /* rows that open nothing (Integrity) */
+.list .list-more { justify-self: start; margin-top: 10px; }
 
 /* percentiles strip */
 

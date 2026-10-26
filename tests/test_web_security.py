@@ -126,12 +126,12 @@ def test_status_file_is_whitelisted_and_world_readable(signed_in, app, settings,
     diag = {"uuid": str(uuid.uuid4()), "measurement_uuid": rec["uuid"], "agent_id": "pi", "agent_seq": 2, "t_ms": rec["t_ms"],
             "public_ip": "203.0.113.77", "public_ip_changed": 0}
     assert signed(c, "POST", "/speedtest/agent/v1/records", {"items": [item("measurement", rec, raw), item("diagnostic", diag)]}).status_code == 200
-    st = {"state": "idle", "iface": "eth0", "gateway": "192.168.8.1", "lan_ip": "192.168.8.20", "next_test_ms": rec["t_ms"] + 1800_000,
+    st = {"state": "idle", "iface": "eth0", "gateway": "192.168.1.1", "lan_ip": "192.168.1.20", "next_test_ms": rec["t_ms"] + 1800_000,
           "interval_min": 30, "mode": "normal"}
     assert signed(c, "POST", "/speedtest/agent/v1/status", st).status_code == 200
     doc = app.state.status_document()
     text = json.dumps(doc)
-    for secret in ("203.0.113.77", "192.168.8.1", "192.168.8.20", "speed.example.net", "eth0", "\"pi\"", str(settings.data_dir)):
+    for secret in ("203.0.113.77", "192.168.1.1", "192.168.1.20", "speed.example.net", "eth0", "\"pi\"", str(settings.data_dir)):
         assert secret not in text, secret
     assert doc["last"]["download_mbps"] == 128.0 and doc["agent"]["online"] and doc["agent"]["next_test_ms"] == st["next_test_ms"]
     assert doc["url"] == "https://example.com/speedtest/" and doc["health_label"]
