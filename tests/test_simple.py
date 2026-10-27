@@ -37,7 +37,7 @@ def test_slow_line_says_no_and_gives_the_steps():
     assert r["level"] == "bad" and "well below" in r["verdict"] and r["typical_down"] == 40
     assert r["steps"]["action"] and "132 Mbps" in r["steps"]["say"] and "40 Mbps" in r["steps"]["say"]
     assert any("CISAS" in s for s in r["steps"]["list"])
-    assert "—" not in repr(r)                                      # no em dashes anywhere
+    assert "\u2014" not in repr(r)                                      # no em dashes anywhere
 
 
 def test_monitor_side_slowdowns_are_set_aside():
