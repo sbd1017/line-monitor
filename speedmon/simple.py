@@ -194,7 +194,8 @@ def build(tests: list, outages: list, s: dict, preset: str, now_ms: int) -> dict
         out.update(level="warn", verdict="Mostly, but it's often slow",
                    detail=f"You usually get about {mbps(typical)} Mbps, but {pct_slow:.0f}% of tests were well below that.")
     elif drop["minutes"] >= DROPOUT_MINUTES or drop["count"] >= DROPOUT_COUNT:
-        out.update(level="warn", verdict="Your speed is fine, but your internet keeps dropping out",
+        out.update(level="warn", verdict=("Your speed is fine, but your internet keeps dropping out" if drop["count"] >= DROPOUT_COUNT
+                                           else f"Your speed is fine, but your internet was off for over {drop['minutes'] // 60} hour{'s' if drop['minutes'] >= 120 else ''}"),
                    detail=f"You usually get about {mbps(typical)} Mbps. {drop['text']}")
     else:
         share = "all of it" if typical >= adv else f"{min(99, 100 * typical / adv):.0f}% of it"

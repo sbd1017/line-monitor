@@ -92,6 +92,8 @@ def test_dropouts_in_words():
     many = [o(NOW + i * 10_000_000, 30, 30) for i in range(3)]
     r = simple.build(every_half_hour(7, lambda t: 135.0), many, S, "7d", NOW)
     assert r["level"] == "warn" and "dropping out" in r["verdict"]
+    r = simple.build(every_half_hour(7, lambda t: 135.0), [o(NOW, 66, 66), o(NOW + 10_000_000, 7, 7)], S, "7d", NOW)
+    assert r["verdict"] == "Your speed is fine, but your internet was off for over 1 hour"
 
 
 def test_not_enough_tests():
