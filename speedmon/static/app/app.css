@@ -447,3 +447,51 @@ body.has-secnav .toast { bottom: calc(78px + env(safe-area-inset-bottom, 0px)); 
 .qtag.flag { color: var(--warn); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 45%, transparent); }
 .qtag.info { color: var(--ink-2); }
 @media print { .cap-note { background: none !important; box-shadow: inset 2px 0 0 #b87a00 !important; } }
+
+/* Simple tab: the plain-words view. Bigger type, one column, no instrument styling. */
+.simple { max-width: 880px; }
+.simple-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 28px 0 20px; }
+.simple-top h1 { font-size: clamp(22px, 3.4vw, 30px); font-weight: 650; }
+.simple .seg button { font: 600 13px var(--sans); padding: 8px 13px; }
+.simple-body { display: grid; gap: 22px; transition: opacity .15s; }
+.simple-body p { font-size: 16px; line-height: 1.55; color: var(--ink-2); }
+.simple-body h2 { font-size: 20px; font-weight: 650; color: var(--ink); }
+.simple-body h3 { font-size: 15px; font-weight: 650; color: var(--ink); }
+.simple-verdict { --tone: var(--offline); display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: start; padding: 24px; border-radius: 14px; background: color-mix(in srgb, var(--tone) 11%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 38%, transparent); }
+.simple-verdict.lvl-good { --tone: var(--good); }
+.simple-verdict.lvl-warn { --tone: var(--warn); }
+.simple-verdict.lvl-bad { --tone: var(--crit); }
+.simple-verdict h2 { font-size: clamp(22px, 3.6vw, 30px); line-height: 1.2; margin-bottom: 8px; }
+.simple-verdict p + p { margin-top: 6px; }
+.simple-icon { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: var(--tone); color: #05080c; font: 800 24px var(--sans); }
+.simple-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.simple-num { padding: 18px; border-radius: 12px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.simple-num-label { font-size: 14px; color: var(--ink-2); }
+.simple-num-value { font: 700 clamp(30px, 5vw, 42px)/1.1 var(--display); letter-spacing: -.02em; margin: 6px 0 4px; font-variant-numeric: tabular-nums; }
+.simple-num-value span { font-size: 15px; font-weight: 600; color: var(--mute); letter-spacing: 0; }
+.simple-num-note { font-size: 13px; }
+.simple-body .simple-up { font-size: 14px; margin-top: -10px; }
+.simple-rows { display: grid; border-top: 1px solid var(--line); }
+.simple-row { padding: 16px 0 16px 16px; border-bottom: 1px solid var(--line); box-shadow: inset 3px 0 0 var(--line-2); }
+.simple-row.tone-warn { box-shadow: inset 3px 0 0 var(--warn); }
+.simple-row.tone-bad { box-shadow: inset 3px 0 0 var(--crit); }
+.simple-row h3 { margin-bottom: 4px; }
+.simple-todo { display: grid; gap: 12px; padding: 22px; border-radius: 14px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.simple-todo ol { margin: 0; padding-left: 22px; display: grid; gap: 8px; font-size: 16px; line-height: 1.5; color: var(--ink-2); }
+.simple-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.simple-actions .btn { padding: 11px 16px; font-size: 14px; }
+.simple-body p.small { font-size: 13px; }
+.simple-say { border-radius: 10px; background: var(--surface-2); padding: 14px 16px; }
+.simple-say-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+.simple-say blockquote { margin: 0; font-size: 16px; line-height: 1.55; color: var(--ink); }
+.simple-foot { display: grid; gap: 6px; padding-bottom: 20px; }
+.simple-body .simple-foot p { font-size: 13px; color: var(--mute); }
+.simple-foot a { color: var(--ink-2); }
+@media (max-width: 640px) {
+  .simple-nums { grid-template-columns: 1fr; }
+  .simple-num { display: grid; grid-template-columns: 1fr auto; align-items: baseline; column-gap: 12px; padding: 14px 16px; }
+  .simple-num-value { grid-row: span 2; margin: 0; font-size: 30px; }
+  .simple-verdict { grid-template-columns: 1fr; padding: 20px; gap: 12px; }
+  .simple-icon { width: 40px; height: 40px; font-size: 20px; }
+  .simple-todo { padding: 18px; }
+}

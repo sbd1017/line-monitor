@@ -96,8 +96,9 @@ keep exported ledger heads somewhere else.
   and `/api/latency`), `viz.js` (gauge, pulse, heatmap, calendar, DNA, bars, histograms, percentiles,
   timeline). Raw tests are sent when ≤ 2 points per pixel; otherwise SQL buckets (1 min to 30 days), using the
   hourly probe roll-up for long ranges.
-* Views: Live, Evidence (paper style, prints to A4), Compare, Explorer (+ detail drawer), Export, Notes,
-  Integrity, Settings, Day.
+* Views: Live, Simple (plain-words answer and next steps for non-technical readers; wording built in
+  `speedmon/simple.py`, same scheduled/clean/outage rules as everything else), Evidence (paper style, prints to
+  A4, with the Integrity block at the bottom), Compare, Explorer (+ detail drawer), Export, Notes, Settings, Day.
 
 ## Exports (`speedmon/exports/`)
 

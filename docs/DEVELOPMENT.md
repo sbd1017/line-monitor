@@ -7,7 +7,7 @@ Long-term, evidence-grade measurement of a Virgin Media Gig1 connection, from a 
   are stored in a local outbox first and pushed (HMAC-signed) to the backend, so nothing is lost while the
   backend is unavailable.
 * **speedmon** (on the Pi, behind nginx and Cloudflare): append-only SQLite with a SHA-256 hash chain; a private
-  dashboard (Live, Evidence, Compare, Explorer, Export, Notes, Integrity, Settings); XLSX/CSV/ZIP exports with no
+  dashboard (Live, Simple, Evidence, Compare, Explorer, Export, Notes, Settings); XLSX/CSV/ZIP exports with no
   row limits.
 
 | Document | For |

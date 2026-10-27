@@ -4,6 +4,7 @@ import * as bus from './bus.js';
 
 const VIEWS = {
   live: () => import('./views/live.js'),
+  simple: () => import('./views/simple.js'),
   evidence: () => import('./views/evidence.js'),
   compare: () => import('./views/compare.js'),
   explorer: () => import('./views/explorer.js'),

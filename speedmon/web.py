@@ -31,7 +31,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import analytics, auth, canonical, ingest, integrity, quality, series, settings_store, statusfile, timeutil
+from . import analytics, auth, canonical, ingest, integrity, quality, series, settings_store, simple, statusfile, timeutil
 from . import site_auth
 from .config import VERSION, Settings, load_settings
 from .db import Database
@@ -41,7 +41,7 @@ log = logging.getLogger("speedmon")
 HERE = Path(__file__).parent
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; "
        "font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
-SPA_ROUTES = ("/", "/evidence", "/explorer", "/export", "/settings", "/compare", "/integrity", "/annotations")
+SPA_ROUTES = ("/", "/simple", "/evidence", "/explorer", "/export", "/settings", "/compare", "/integrity", "/annotations")
 FLAG_KINDS = ("exclude", "note", "disputed")
 ANNOTATION_CATEGORIES = ("note", "engineer", "outage", "hardware", "firmware", "reboot", "isp", "complaint", "other")
 
@@ -459,6 +459,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return cached(key, build)
         except ValueError as exc:
             return err(str(exc))
+
+    @app.get(BASE + "/api/simple")
+    def simple_view(request: Request):
+        preset = request.query_params.get("range") or "30d"
+        if preset not in simple.PERIODS:
+            return err("range must be one of " + ", ".join(simple.PERIODS))
+        with db.read() as conn:
+            s = settings_store.get_all(conn)
+            a, b, label = timeutil.resolve_range(preset, s["timezone"])
+            key = ("simple", period_key(request), data_version(conn))
+
+            def build():
+                out = simple.build(analytics.load_tests(conn, a, b, s), analytics.outage_incidents(conn, a, b), s, preset,
+                                   timeutil.now_ms())
+                return {"range": {"from_ms": a, "to_ms": b, "label": label, "preset": preset}, **out}
+            return cached(key, build)
 
     @app.get(BASE + "/api/series")
     def series_view(request: Request):
