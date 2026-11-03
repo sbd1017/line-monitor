@@ -9,6 +9,10 @@ It's written around a UK Virgin Media Gig1 line (1,130 Mbps advertised, 565 Mbps
 package figures are settings. Any connection works, and you can keep a history of packages, so an upgrade
 doesn't change how older results are judged.
 
+There are two ways to read it. The Simple page answers one question in plain words, "am I getting what I pay
+for?", with three numbers and what to do next, so anyone in the house can use it. Everything else is the
+detailed view, for when you want to see exactly when, how often and by how much the line falls short.
+
 ## Live demo
 
 **[mubar.uk/speedtest](https://mubar.uk/speedtest/)**: open it and look around, no sign-in needed.
@@ -20,6 +24,11 @@ doesn't change how older results are judged.
 - Settings, notes and pausing are read-only.
 - Exports work (a full three-year XLSX takes about two minutes) and are deleted after two hours.
 - The data goes back to its starting point every night at 04:00 UK time.
+
+![The Simple page: a plain answer, what you pay for, what you usually get and your slowest test](docs/screenshots/simple.png)
+
+<sub><b>Simple</b>: one answer, three numbers, when it's slow, whether it drops out, and Virgin's promise. When
+something is wrong it lists the steps to take and what to say to your ISP.</sub>
 
 ![The Live page: latest test, the gauge and the line's status](docs/screenshots/live.png)
 
@@ -49,9 +58,15 @@ doesn't change how older results are judged.
   agent's code mean no setting can make it test every few seconds.
 - **Failures are results.** A test that couldn't run is recorded with the reason, never dropped and never
   counted as 0 Mbps. A Pi that was switched off shows as "monitor offline", not as an outage.
+- **Fair to the ISP too.** Before a test the agent waits for other traffic on the Pi to die down. Every test is
+  then labelled clean, or with what on the monitor's side could have held it down (Pi busy, Pi under load,
+  Ethernet errors, a link too slow for the package). Clean-only figures sit beside the full ones, and the Live
+  page warns you if the Pi's own link can't measure the package you pay for.
 - **Statistics that don't overstate.** Percentages and averages use the scheduled tests only, because the extra
   tests deliberately sample the bad moments. Outage lengths are given as ranges, and the congestion check only
   says the evenings are slower when the numbers support it.
+- **Anomalies.** Tests far outside what's normal for that hour and type of day (weekday or weekend) are picked
+  out against the previous four weeks, so a one-off drop stands out from the usual evening dip.
 - **Guarantee watch.** Under Virgin Media's terms, three days in a row below the minimum guaranteed speed lets
   you report it, and if it isn't fixed in 30 days you can leave without a fee. The dashboard and the XLSX track
   those runs of days for you.
@@ -66,7 +81,7 @@ doesn't change how older results are judged.
 ## Why the records can be trusted
 
 Every record is hashed when it's made and chained to the one before it, so changing or removing anything
-afterwards breaks the chain, and the Integrity page shows it. The database refuses edits to raw records
+afterwards breaks the chain, and the integrity check at the bottom of the Evidence report shows it. The database refuses edits to raw records
 altogether. Corrections and notes go in a separate layer that's also kept with its history. The agent numbers
 every record it sends, so a missing one shows up as a gap. This is tamper evidence, not a certificate, so keep a
 copy of the chain head somewhere else from time to time.
@@ -76,8 +91,9 @@ copy of the chain head somewhere else from time to time.
 Two small services on the Pi. The agent runs the tests and keeps everything in its own queue first, then sends
 it to the backend over a signed connection on the Pi itself. If the backend is down or being updated, nothing
 is lost: the queue catches up when it's back. The backend stores the records and serves a private dashboard
-behind a pass phrase. Nothing on the home network needs an open port: I reach mine through a Cloudflare tunnel
-and nginx.
+behind a pass phrase. It can also sit behind a site-wide login on nginx instead (off unless `SITE_AUTH=1`); then
+nginx has to send a secret key of its own, so another program on the same machine can't pretend to be you.
+Nothing on the home network needs an open port: I reach mine through a Cloudflare tunnel and nginx.
 
 ## Built with
 
