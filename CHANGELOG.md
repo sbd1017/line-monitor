@@ -2,6 +2,15 @@
 
 What changed in each release of Line Monitor, newest first.
 
+## v1.7.0 - 2026-11-03
+
+- Simple: a new page that answers "am I getting what I pay for?" in plain words, with three numbers (what you pay for, what you usually get, your slowest test), when it is slow, whether it drops out, the ISP's guarantee, and the steps to take and what to say when something is wrong
+- Live: Anomalies shows the latest three, with Show more for the rest
+- Central login: the app now also requires its own proxy key (X-Site-Proxy-Key) from nginx, so other processes on the server cannot pose as the owner
+- Dependencies: FastAPI 0.120.4 and Starlette 0.49.3
+- Demo: a minute probe and a test's pre-test probe landing on the same millisecond no longer clash
+- README: the Simple page with a screenshot, test quality labels, anomalies, the site-login key, and Integrity now in Evidence
+
 ## v1.6.0 - 2026-10-21
 
 - Pages can no longer appear twice when a navigation starts while another is still loading (double click, quick Back)
