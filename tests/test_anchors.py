@@ -104,3 +104,18 @@ def test_providers_can_be_overridden_by_environment(monkeypatch):
     assert anchors.providers_from_env() == (("one", "https://a.example/tsr"), ("two", "http://b.example"))
     monkeypatch.setenv("SPEEDMON_TSA", "")
     assert anchors.providers_from_env() == ()
+
+
+def test_nothing_new_is_not_a_failure(db, tsa, monkeypatch):
+    from speedmon import cli
+    monkeypatch.setattr(anchors, "PROVIDERS", (("one", "http://one"),))
+    add_entry(db)
+    assert cli.main(["anchor"]) == 0
+    assert cli.main(["anchor"]) == 0            # same head: both providers skip, still a good run
+
+
+def test_every_authority_failing_is_a_failure(db, monkeypatch):
+    from speedmon import cli
+    monkeypatch.setattr(anchors, "PROVIDERS", (("broken", "http://broken"),))
+    add_entry(db)
+    assert cli.main(["anchor"]) == 1

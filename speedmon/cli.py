@@ -111,7 +111,8 @@ def main(argv=None) -> int:
     if args.cmd == "anchor":
         res = anchors.anchor_once(db, timeout=args.timeout)
         print(json.dumps(res, indent=1))
-        return 0 if res.get("skipped") or any(r["status"] == "ok" for r in res["results"]) else 1
+        states = [r["status"] for r in res["results"]]
+        return 0 if res.get("skipped") or not states or "ok" in states or "skip" in states else 1
     if args.cmd == "verify-anchors":
         res = anchors.verify_all(db, limit=args.limit)
         print(json.dumps(res, indent=1))
