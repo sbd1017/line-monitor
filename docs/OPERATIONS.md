@@ -22,15 +22,35 @@ Then open https://example.com/speedtest/. Changing the phrase later uses the sam
 | `speedagent.service` | probes + speed tests | yes (after network-online, time-sync) | always, after 5 s |
 | `speedmon-backup.timer` | daily 03:37 consistent backup, keeps 60, verifies the copy | yes | (oneshot) |
 | `speedmon-verify.timer` | weekly full integrity check (Sun 04:23), result in the journal | yes | (oneshot) |
+| `speedmon-anchor.timer` | hourly public timestamp of the ledger head (RFC 3161), two authorities | yes | (oneshot) |
 
 ```bash
 systemctl status speedmon speedagent --no-pager
 journalctl -u speedagent -n 50 --no-pager -o cat          # tests, events, backend reachability
 journalctl -u speedmon-verify -n 5 --no-pager -o cat      # last weekly integrity result
+journalctl -u speedmon-anchor -n 20 --no-pager -o cat     # last timestamp attempt
 ```
 
 The agent waits up to 3 minutes for the clock to sync after a boot, so tests are never stamped with a wrong time.
 Each start records an `agent_start` event saying whether the Pi rebooted and whether the previous stop was clean.
+
+## Timestamp anchors
+
+`speedmon-anchor.timer` runs hourly: it takes the current ledger head, writes a short statement naming the chain
+position and the head hash, and has public timestamp authorities (freetsa, DigiCert) sign it. Receipts are stored
+in `anchors` and travel in every ZIP export, so a third party can check that the head predates a later dispute
+without trusting this machine. Nothing is chained or rewritten, and a dead authority is recorded as an error row
+without affecting monitoring.
+
+```bash
+python -m speedmon.cli anchor                    # run now (also done by the timer)
+python -m speedmon.cli anchors --limit 20        # recent anchor attempts
+python -m speedmon.cli verify-anchors            # re-verify receipts against the chain; 2 = a problem
+SPEEDMON_TSA="name=url,name=url" python -m speedmon.cli anchor   # different authorities (empty = none)
+```
+
+`verify-anchors` is also run weekly by `speedmon-verify` alongside the integrity check, so a broken chain shows
+up as a failed anchor rather than only as a failed re-hash. The exported `verify_anchors.py` needs `openssl`.
 
 ## Environment variables (set in the unit files, `deploy/systemd/`)
 

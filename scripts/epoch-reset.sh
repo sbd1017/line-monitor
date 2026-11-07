@@ -33,12 +33,17 @@ log "stopping the agent (waits for any running test)"
 systemctl stop "$AGENT_UNIT"
 log "draining the agent's queue"
 DRAIN_OK=0
+# Drain as the agent's own user, not root: this code reads files that user can write. The key is root-only (the
+# service gets it through LoadCredential), so it gets a short-lived private copy.
+KEY_COPY=$(mktemp)
+cat "$AGENT_KEY" > "$KEY_COPY"
+chown speedagent "$KEY_COPY"
 for i in 1 2 3 4 5; do
-  if (cd "$APP" && SPEEDAGENT_ENV=$AGENT_ENV SPEEDAGENT_ID=${AGENT_ID:-pi} SPEEDAGENT_STATE_DIR="$AGENT_STATE" SPEEDAGENT_KEY_FILE="$AGENT_KEY" \
+  if (cd "$APP" && runuser -u speedagent -- env SPEEDAGENT_ENV=$AGENT_ENV SPEEDAGENT_ID=${AGENT_ID:-pi} SPEEDAGENT_STATE_DIR="$AGENT_STATE" SPEEDAGENT_KEY_FILE="$KEY_COPY" \
      SPEEDAGENT_BACKEND="$BACKEND_URL" "$APP/.venv/bin/python" -m speedagent.cli drain); then DRAIN_OK=1; break; fi
   sleep 10
 done
-chown -R speedagent:speedagent "$AGENT_STATE"
+rm -f "$KEY_COPY"
 if [ $DRAIN_OK != 1 ]; then fail "could not drain the agent's queue; nothing changed"; fi
 
 log "stopping the backend"

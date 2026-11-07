@@ -153,3 +153,35 @@ def test_xlsx_has_no_parts_excel_would_repair(db, settings):
 def _cols(a, b):
     n = lambda s: sum((ord(ch) - 64) * 26 ** i for i, ch in enumerate(reversed(s)))
     return range(n(a), n(b) + 1)
+
+
+def test_zip_pack_carries_checkable_anchors(db, settings, tmp_path, tsa, monkeypatch):
+    from speedmon import anchors
+    monkeypatch.setattr(anchors, "PROVIDERS", (("test", "http://test"),))
+    with db.tx() as c:
+        synthetic.seed(c, days=5, interval_min=60, probe_interval_s=300)
+    assert anchors.anchor_once(db, timeout=30)["results"][0]["status"] == "ok"
+    with db.read() as c:
+        anchored = c.execute("SELECT head_index FROM anchors").fetchone()["head_index"]
+    _, path = run_export(db, settings, "zip", b=timeutil.now_ms() + 600_000)
+    out = tmp_path / "pack"
+    with zipfile.ZipFile(path) as z:
+        assert any(n.startswith("anchors/") and n.endswith(".tsr") for n in z.namelist())
+        z.extractall(out)
+    r = subprocess.run([sys.executable, "-I", str(out / "verify_anchors.py"), str(out)], capture_output=True, text=True)
+    assert "RESULT: OK" in r.stdout, r.stdout + r.stderr
+    assert f"index {anchored}" in r.stdout
+    # move the anchored chain entry: the receipt no longer covers this data
+    p = out / "ledger.csv"
+    lines = p.read_text().splitlines()
+    hdr = lines[0].split(",")
+    i, j = hdr.index("chain_hash"), hdr.index("chain_index")
+    for n, line in enumerate(lines[1:], 1):
+        if line.split(",")[j] == str(anchored):
+            cells = line.split(",")
+            cells[i] = "f" * 64
+            lines[n] = ",".join(cells)
+            break
+    p.write_text("\n".join(lines) + "\n")
+    r = subprocess.run([sys.executable, "-I", str(out / "verify_anchors.py"), str(out)], capture_output=True, text=True)
+    assert "BROKEN" in r.stdout and "PROBLEM" in r.stdout, r.stdout

@@ -87,6 +87,13 @@ numbers every record (`agent_seq`), so a lost record shows as a gap (Integrity p
 twice (agent and backend) and a test asserts they're identical. This is tamper-evidence, not certification:
 keep exported ledger heads somewhere else.
 
+`speedmon/anchors.py` closes that gap for the private copy. Hourly, `speedmon-anchor.timer` takes the current head,
+writes a fixed-shape statement with the chain position in it, and has two public RFC 3161 authorities sign it via
+`openssl ts`. Receipts live in the `anchors` table (append-only, deliberately outside the chain, because an anchor
+points at a chain position) and are checked by `verify_all`, which re-hashes the statement, re-checks the position
+and re-verifies the signature to a trusted root. A receipt is worth what it dates: a head that existed before an
+engineer visit, a reply, or a fix. Nothing depends on it staying up.
+
 ## Web app (`speedmon/web.py` + `speedmon/static/app/`)
 
 * Phrase entrance (scrypt), server-side sessions (`__Secure-speedtest_session`, Path=/speedtest), CSRF token and

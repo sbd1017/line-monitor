@@ -1,0 +1,22 @@
+[Unit]
+Description=speedmon: timestamp the ledger head with public authorities (RFC 3161)
+Documentation=file:/home/pi/line-monitor/docs/ARCHITECTURE.md
+
+[Service]
+Type=oneshot
+User=speedmon
+Group=speedmon
+WorkingDirectory=/home/pi/line-monitor
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=SPEEDMON_ENV=production
+Environment=SPEEDMON_DATA_DIR=/home/pi/line-monitor/var
+ExecStart=/home/pi/line-monitor/.venv/bin/python -m speedmon.cli anchor
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/line-monitor/var
+# Unlike every other speedmon job this one needs the Internet, so IPAddressDeny=any is not set here.
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=120

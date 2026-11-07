@@ -4,6 +4,9 @@
   import-legacy         import the old speedtest-cli CSV/XLSX history (files are only read)
   verify                full integrity check (re-hash every record, walk the chain)
   head                  print the ledger head (write it down / keep it somewhere else)
+  anchor                timestamp the head with the public authorities now (the hourly timer runs this)
+  verify-anchors        re-verify stored receipts against the chain; exit 2 on any problem
+  anchors [--limit N]   recent anchor attempts and their outcome
   backup [--keep N]     consistent online copy of the database into var/backups/
   restore-check FILE    open a backup read-only and verify it
   rebuild-derived       recompute rollups and anomaly scores (derived data only)
@@ -25,7 +28,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from . import auth, importer, ingest, integrity, settings_store, timeutil
+from . import anchors, auth, importer, ingest, integrity, settings_store, timeutil
 from .config import load_settings
 from .db import Database
 
@@ -39,6 +42,12 @@ def main(argv=None) -> int:
     imp.add_argument("--xlsx", type=Path)
     sub.add_parser("verify")
     sub.add_parser("head")
+    an = sub.add_parser("anchor")
+    an.add_argument("--timeout", type=float, default=None)
+    ac = sub.add_parser("verify-anchors")
+    ac.add_argument("--limit", type=int, default=100)
+    al = sub.add_parser("anchors")
+    al.add_argument("--limit", type=int, default=20)
     b = sub.add_parser("backup")
     b.add_argument("--keep", type=int, default=60)
     rc = sub.add_parser("restore-check")
@@ -89,12 +98,32 @@ def main(argv=None) -> int:
         print(json.dumps({k: v for k, v in res.items() if k != "problems"}, indent=1))
         for prob in res["problems"]:
             print("PROBLEM:", prob)
-        print("RESULT:", "OK" if res["ok"] else "FAILED")
-        return 0 if res["ok"] else 2
+        checks = anchors.verify_all(db)
+        print(f"Anchor receipts re-checked: {checks['checked']}, problems: {checks['problems']}")
+        ok = res["ok"] and not checks["problems"]
+        print("RESULT:", "OK" if ok else "FAILED")
+        return 0 if ok else 2
     if args.cmd == "head":
         with db.read() as conn:
             h = integrity.head(conn)
         print(f"{h['head']}  ({h['entries']:,} ledger entries, last at {h['at']})")
+        return 0
+    if args.cmd == "anchor":
+        res = anchors.anchor_once(db, timeout=args.timeout)
+        print(json.dumps(res, indent=1))
+        return 0 if res.get("skipped") or any(r["status"] == "ok" for r in res["results"]) else 1
+    if args.cmd == "verify-anchors":
+        res = anchors.verify_all(db, limit=args.limit)
+        print(json.dumps(res, indent=1))
+        print("RESULT:", "OK" if not res["problems"] else "PROBLEM")
+        return 0 if not res["problems"] else 2
+    if args.cmd == "anchors":
+        print(json.dumps(anchors.summary(db), indent=1))
+        with db.read() as conn:
+            for r in conn.execute("SELECT id, created_at, provider, head_index, status, error FROM anchors "
+                                  "ORDER BY id DESC LIMIT ?", (args.limit,)):
+                print(f"{r['id']:>6} {r['created_at']} {r['provider']:<10} index {r['head_index']:<8} "
+                      f"{r['status']:<6} {r['error'] or ''}")
         return 0
     if args.cmd == "backup":
         return backup(s, args.keep)
@@ -112,7 +141,7 @@ def main(argv=None) -> int:
     if args.cmd == "stats":
         with db.read() as conn:
             for t in ("measurements", "diagnostics", "probes", "events", "ledger", "quarantine", "annotations",
-                      "measurement_flags", "imports", "exports"):
+                      "measurement_flags", "imports", "exports", "anchors", "anchor_checks"):
                 print(f"{t:20s} {conn.execute(f'SELECT count(*) FROM {t}').fetchone()[0]:>12,}")
             print("data_origin", settings_store.get_all(conn).get("data_origin", "real"))
         return 0

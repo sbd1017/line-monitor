@@ -185,6 +185,21 @@ def _table_csv(zf, name, conn, sql, args, fmt=None) -> int:
     return n
 
 
+def _zip_anchors(zf, conn, max_index: int) -> int:
+    """Latest receipts, newest first, so a pack can be dated by a third party. 200 is plenty for a dispute."""
+    rows = conn.execute("SELECT id, provider, head_index, head_hash, created_at, statement, statement_sha256, token "
+                        "FROM anchors WHERE status = 'ok' AND token IS NOT NULL AND head_index <= ? "
+                        "ORDER BY id DESC LIMIT 200", (max_index,)).fetchall()
+    for r in rows:
+        base = f"anchors/{r['id']:06d}-{r['provider']}"
+        zf.writestr(base + ".txt", r["statement"])
+        zf.writestr(base + ".tsr", bytes(r["token"]))
+        zf.writestr(base + ".json", json.dumps({k: r[k] for k in
+                                                ("id", "provider", "head_index", "head_hash", "created_at",
+                                                 "statement_sha256")}, indent=1))
+    return len(rows)
+
+
 def write_zip(conn, s, settings, a, b, label, params, path: Path, progress=None) -> int:
     verification = integrity.verify(conn)
     if progress:
@@ -211,13 +226,18 @@ def write_zip(conn, s, settings, a, b, label, params, path: Path, progress=None)
         files["owner_flags.csv"] = _table_csv(zf, "owner_flags.csv", conn, "SELECT * FROM measurement_flags ORDER BY id", ())
         src = sources(params)
         ph = ",".join("?" * len(src))
-        files["ledger.csv"] = _table_csv(
-            zf, "ledger.csv", conn,
-            "SELECT l.* FROM ledger l WHERE (l.stream = 'measurement' AND l.uuid IN (SELECT uuid FROM measurements WHERE t_ms >= ? "
-            f"AND t_ms < ? AND source IN ({ph}))) OR (l.stream = 'diagnostic' AND l.uuid IN (SELECT d.uuid FROM diagnostics d "
-            "WHERE d.t_ms >= ? AND d.t_ms < ?)) OR (l.stream = 'probe' AND ? AND l.uuid IN (SELECT uuid FROM probes WHERE t_ms >= ? "
-            "AND t_ms < ?)) OR (l.stream = 'event' AND l.uuid IN (SELECT uuid FROM events WHERE t_ms >= ? AND t_ms < ?)) "
-            "ORDER BY l.chain_index", (a, b, *src, a, b, int(params.get("include_probes", True)), a, b, a, b))
+        covered = (
+            "(l.stream = 'measurement' AND l.uuid IN (SELECT uuid FROM measurements WHERE t_ms >= ? AND t_ms < ? "
+            f"AND source IN ({ph}))) OR (l.stream = 'diagnostic' AND l.uuid IN (SELECT d.uuid FROM diagnostics d "
+            "WHERE d.t_ms >= ? AND d.t_ms < ?)) OR (l.stream = 'probe' AND ? AND l.uuid IN (SELECT uuid FROM probes "
+            "WHERE t_ms >= ? AND t_ms < ?)) OR (l.stream = 'event' AND l.uuid IN (SELECT uuid FROM events "
+            "WHERE t_ms >= ? AND t_ms < ?))"
+        )
+        covered_args = (a, b, *src, a, b, int(params.get("include_probes", True)), a, b, a, b)
+        files["ledger.csv"] = _table_csv(zf, "ledger.csv", conn, "SELECT l.* FROM ledger l WHERE " + covered +
+                                         " ORDER BY l.chain_index", covered_args)
+        # Receipts taken after the pack's last covered entry cannot be tied to these data, so leave them out.
+        top = conn.execute("SELECT max(l.chain_index) FROM ledger l WHERE " + covered, covered_args).fetchone()[0]
         files["diagnostics.csv"] = _table_csv(
             zf, "diagnostics.csv", conn,
             "SELECT " + ", ".join(c for c in canonical.FIELDS["diagnostic"] if c != "public_ip" or params.get("include_public_ip"))
@@ -231,12 +251,16 @@ def write_zip(conn, s, settings, a, b, label, params, path: Path, progress=None)
                     raw.write((json.dumps({"uuid": uid, "raw": text}, ensure_ascii=False) + "\n").encode("utf-8"))
                     nraw += 1
             files["raw_engine_output.jsonl"] = nraw
+        n_anchor = _zip_anchors(zf, conn, top) if top is not None else 0
+        if n_anchor:
+            files["anchors"] = n_anchor
         if progress:
             progress(0.9)
         report = jobs.report_data(conn, s, a, b, label)
         zf.writestr("report.json", json.dumps(report, indent=1, default=str))
         zf.writestr("integrity.json", json.dumps(verification, indent=1))
         zf.writestr("verify_export.py", (Path(__file__).parent / "verify_export.py").read_text())
+        zf.writestr("verify_anchors.py", (Path(__file__).parent / "verify_anchors.py").read_text())
         zf.writestr("README.txt", README.format(label=label, generated=report["generated_local"], software=report["software"],
                                                 head=report["ledger"]["head"], n=n,
                                                 verdict="PASSED" if verification["ok"] else "FAILED"))
@@ -275,6 +299,10 @@ Files
   manifest.json            what is in this pack, the hash scheme and the field lists
   verify_export.py         re-computes every record hash from these CSV files and checks the chain links:
                              python3 verify_export.py .
+  anchors/                 timestamp receipts from public authorities over earlier ledger heads, each with the
+                           exact statement that was signed. They date the data independently of the owner:
+                             python3 verify_anchors.py .        (needs openssl)
+  verify_anchors.py        the receipt checker used above
 
 Times are UTC in ISO-8601 (and as epoch milliseconds in t_ms); local times use the time zone and offset shown
 in each row. Speeds are megabits per second (1 Mbps = 1,000,000 bits/s).

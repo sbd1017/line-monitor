@@ -1,4 +1,5 @@
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -57,3 +58,34 @@ def signed_in(client):
     csrf = re.search(r'name="csrf" content="([^"]+)"', client.get("/speedtest/").text).group(1)
     client.headers.update({"x-csrf-token": csrf})
     return client
+
+
+def _openssl(*args, cwd):
+    subprocess.run(["openssl", *args], cwd=cwd, check=True, capture_output=True)
+
+
+@pytest.fixture
+def tsa(tmp_path, monkeypatch):
+    """A self-signed RFC 3161 authority answering from the local filesystem, so anchor tests stay offline."""
+    from speedmon import anchors
+
+    work = tmp_path / "tsa"
+    (work / "certs").mkdir(parents=True)
+    _openssl("req", "-x509", "-newkey", "rsa:2048", "-keyout", "ca.key", "-out", "ca.pem", "-nodes", "-days", "2",
+             "-subj", "/CN=Test TSA", "-addext", "extendedKeyUsage=critical,timeStamping",
+             "-addext", "basicConstraints=critical,CA:true", cwd=work)
+    (work / "serial").write_text("01")
+    (work / "tsa.cnf").write_text(
+        "[ tsa ]\ndefault_tsa = one\n[ one ]\ndir = .\nserial = ./serial\nsigner_cert = ./ca.pem\ncerts = ./certs\n"
+        "signer_key = ./ca.key\ndefault_policy = 1.3.6.1.4.1.99999.1\ndigests = sha256\naccuracy = secs:1\n"
+        "ordering = yes\ntsa_name = yes\ness_cert_id_chain = no\ness_cert_id_alg = sha256\nsigner_digest = sha256\ncrypto_device = builtin\n")
+
+    def post(url, body, timeout):
+        if url == "http://broken":
+            raise anchors.AnchorError("connection refused")
+        (work / "q.tsq").write_bytes(body)
+        _openssl("ts", "-reply", "-queryfile", "q.tsq", "-config", "tsa.cnf", "-out", "r.tsr", cwd=work)
+        return (work / "r.tsr").read_bytes()
+
+    monkeypatch.setattr(anchors, "_post", post)
+    return work

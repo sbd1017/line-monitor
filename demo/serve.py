@@ -137,7 +137,8 @@ class Demo:
                     self.last_verify = time.monotonic()
             if rel == "/api/exports":
                 body, receive = await self.read_body(receive)
-                problem = self.export_problem(token, body)
+                # Counted per address: a visitor can drop the cookie and get a new one.
+                problem = self.export_problem(dict(scope["headers"]).get(b"x-real-ip", b"").decode("latin-1") or token, body)
                 if problem:
                     return await self.json(send, 429, {"error": problem}, new_cookie)
 
@@ -236,12 +237,14 @@ class Demo:
         if self.export_bytes() > EXPORT_DISK_BYTES:
             return "The demo's export space is full for now. Finished exports are cleared after two hours."
         with self.lock:
+            if len(self.exports) > 5000:
+                self.exports.clear()
             mine = self.exports[visitor]
             for q in (mine, self.export_times):
                 while q and now - q[0] > 3600:
                     q.popleft()
             if len(mine) >= EXPORTS_PER_VISITOR_HOUR:
-                return f"The demo allows {EXPORTS_PER_VISITOR_HOUR} exports an hour per visitor. Download the ones you have."
+                return f"The demo allows {EXPORTS_PER_VISITOR_HOUR} exports an hour per address. Download the ones you have."
             if len(self.export_times) >= EXPORTS_PER_HOUR:
                 return "The demo has built a lot of exports in the last hour. Try again a little later."
             mine.append(now)
