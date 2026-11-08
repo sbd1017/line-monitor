@@ -201,9 +201,14 @@ If the results sit well below the package with the Pi idle and a clean 1000/Full
 1. **Pi:** each test's diagnostics show link speed, errors, CPU, throttling and other traffic on the Pi.
 2. **Router:** check for QoS/SQM bandwidth limits, a VPN client, DNS filtering, or a WAN port that negotiated less
    than expected. Run the router's own speed test if it has one.
-3. **ISP:** with the ISP's hub in modem mode, plug a laptop straight into it and run speedtest.net. If that's just as
+3. **Path:** the Live page has a "Where loss starts" section. It traces past the house every
+   `path_interval_min` minutes (default 15). Hop 1 is the router, everything after it is the ISP's. "Clear" means no
+   hop lost packets. "Starts at your router" is the house. "Starts past your router" means the loss is theirs, and
+   it is only claimed when the loss also reaches the last responding hop. "Unclear" means a middle router stopped
+   answering, which is normal and not evidence either way.
+4. **ISP:** with the ISP's hub in modem mode, plug a laptop straight into it and run speedtest.net. If that's just as
    slow, the problem is the ISP's side, and the evidence from this system applies.
-4. Annotate whatever you change (Notes page), so before/after shows up in **Compare**.
+5. Annotate whatever you change (Notes page), so before/after shows up in **Compare**.
 
 ## Status files for other apps
 Two small files let other apps on the Pi show the line's state without access to the database or the private state

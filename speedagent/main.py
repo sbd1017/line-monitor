@@ -149,14 +149,17 @@ class Agent:
         return rec
 
     def path_loop(self):
-        """Traceroute to the first router beyond the house, on its own slow cadence."""
+        """Traceroute past the house on its own slow cadence. Starts soon after a boot rather than a slot later."""
+        delay = 60
         while not self.stop.is_set():
-            iv = self.cfg["path_interval_min"] * 60
-            if self.stop.wait(max(30, iv - (time.time() % iv))):
+            if self.stop.wait(delay):
                 return
             if self.live.get("state") == "testing":
+                delay = 60
                 continue                                # a traceroute mid-test would measure the test's own queue
             self.path_once()
+            iv = self.cfg["path_interval_min"] * 60
+            delay = max(30, iv - (time.time() % iv))
 
     def path_once(self) -> dict:
         self._route()
