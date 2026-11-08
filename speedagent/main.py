@@ -166,7 +166,7 @@ class Agent:
                "link_speed_mbps": sysinfo.link(self.iface)["link_speed_mbps"]}
         started = time.monotonic()
         try:
-            rec.update(paths.measure(self.gateway))
+            rec.update(paths.measure())
         except Exception as exc:                        # a missing or wedged mtr is a path failure, not an agent one
             rec.update(target=None, target_source="none", hops=None, hop_count=0, boundary="unknown",
                        first_bad_hop=None, sustained=0, gw_loss_pct=None, gw_rtt_ms=None, cycles=0,

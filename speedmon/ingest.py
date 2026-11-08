@@ -24,7 +24,7 @@ ENUMS = {
     "status": {"ok", "failed"},
     "state": {"ok", "degraded", "wan_down", "dns_fail", "lan_fault", "link_down"},
     "boundary": {"none", "lan", "isp", "unknown"},
-    "target_source": {"discovered", "anchor", "none"},
+    "target_source": {"anchor", "none"},
 }
 REQUIRED = {
     "measurement": ("uuid", "agent_id", "source", "kind", "engine", "t_ms", "started_at", "tz_name", "utc_offset_min",

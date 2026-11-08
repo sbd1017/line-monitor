@@ -5,9 +5,8 @@ that. This does: hop 1 is the Flint, i.e. the edge of the house. Everything afte
 only after hop 1, while hop 1 is clean and the loss carries to the end of the path, is on their network and not on
 anything in the house.
 
-The target is discovered, never hardcoded: a 3-cycle run to an anchor picks the first responding hop beyond the
-gateway, which in modem mode is the access-network router. The measured run then goes to that address, so the whole
-path is theirs and the run is short.
+The target is always the same public anchor, not the access router: Virgin's first router answers TTL-exceeded
+probes but drops echo requests aimed at itself, so tracing *to* it shows nothing at hop 2. Tracing through it does.
 
 Reading rules, because routers are allowed to be busy:
   * a lossy hop in the middle that clears afterwards is usually that router deprioritising the probe, so the
@@ -25,7 +24,6 @@ import shutil
 import subprocess
 
 MTR = shutil.which("mtr") or "/usr/bin/mtr"
-DISCOVER_CYCLES = 3
 MAX_HOPS = 8
 BAD_PCT = 20.0
 MIN_CYCLES = 8
@@ -55,24 +53,6 @@ def hops_of(report: dict) -> list[dict]:
     return out[:MAX_HOPS]
 
 
-def discover(gateway: str | None, timeout: float = 30) -> tuple[str | None, str]:
-    """The first responding hop beyond the gateway, or an anchor when that cannot be found."""
-    try:
-        hops = hops_of(_run(ANCHOR, DISCOVER_CYCLES, timeout))
-    except (OSError, ValueError, subprocess.SubprocessError):
-        return None, "none"
-    for hop in hops[1:]:
-        if hop["hop"] < 2 or hop["host"] is None:
-            continue
-        if gateway and hop["host"] == gateway:
-            continue
-        return hop["host"], "discovered"
-    last = hops[-1]["host"] if hops else None
-    if last and last != gateway:
-        return last, "anchor"
-    return ANCHOR, "anchor"          # only the gateway answered: aim past it at a known public address
-
-
 def classify(hops: list[dict], cycles: int) -> tuple[str, int | None, int]:
     """(boundary, first bad hop, sustained). Deliberately conservative; see the module docstring."""
     if cycles < MIN_CYCLES or not hops:
@@ -90,20 +70,13 @@ def classify(hops: list[dict], cycles: int) -> tuple[str, int | None, int]:
     return ("isp" if sustained else "unknown"), bad[0]["hop"], sustained
 
 
-def measure(gateway: str | None, cycles: int = 20, timeout: float = 60) -> dict:
+def measure(cycles: int = 20, timeout: float = 60) -> dict:
     """One path measurement. Raises OSError when mtr is unusable, so the caller records a failure."""
-    target, source = discover(gateway, timeout=min(timeout, 30))
-    hops: list[dict] = []
-    error = None
-    if target is None:
-        error = "no responding hop beyond the gateway"
-    else:
-        hops = hops_of(_run(target, cycles, timeout))
-        if not hops:
-            error = f"no hops reported for {target}"
+    hops = hops_of(_run(ANCHOR, cycles, timeout))
+    error = None if hops else f"no hops reported for {ANCHOR}"
     boundary, first_bad, sustained = classify(hops, cycles)
     gateway_hop = hops[0] if hops else None
-    return {"target": target, "target_source": source, "hops": json.dumps(hops, separators=(",", ":")),
+    return {"target": ANCHOR, "target_source": "anchor", "hops": json.dumps(hops, separators=(",", ":")),
             "hop_count": len(hops), "boundary": boundary, "first_bad_hop": first_bad, "sustained": sustained,
             "gw_loss_pct": gateway_hop["loss_pct"] if gateway_hop else None,
             "gw_rtt_ms": gateway_hop["avg_ms"] if gateway_hop else None,

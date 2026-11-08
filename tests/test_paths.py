@@ -56,35 +56,21 @@ def test_silent_hops_are_skipped_when_judging():
     assert paths.classify(hops, 20) == ("isp", 3, 1)
 
 
-def test_discovery_skips_the_gateway_and_silent_hops(monkeypatch):
-    monkeypatch.setattr(paths, "_run", lambda *a, **k: report((1, "192.0.2.1", 0.0), (2, "???", 100.0),
-                                                               (3, "198.51.100.1", 0.0)))
-    assert paths.discover("192.0.2.1") == ("198.51.100.1", "discovered")
-
-
-def test_discovery_falls_back_to_the_anchor(monkeypatch):
-    monkeypatch.setattr(paths, "_run", lambda *a, **k: report((1, "192.0.2.1", 0.0)))
-    assert paths.discover("192.0.2.1") == (paths.ANCHOR, "anchor")
-
-
 def test_measure_records_where_the_loss_starts(monkeypatch):
-    monkeypatch.setattr(paths, "discover", lambda gw, timeout=30: ("198.51.100.1", "discovered"))
     monkeypatch.setattr(paths, "_run", lambda *a, **k: report((1, "192.0.2.1", 0.0), (2, "198.51.100.1", 30.0),
                                                                (3, "203.0.113.9", 30.0)))
-    got = paths.measure("192.0.2.1", cycles=20)
+    got = paths.measure(cycles=20)
     assert got["boundary"] == "isp" and got["first_bad_hop"] == 2 and got["sustained"] == 1
     assert got["gw_rtt_ms"] == 1.0 and got["hop_count"] == 3 and len(json.loads(got["hops"])) == 3
-    assert got["target"] == "198.51.100.1" and got["error"] is None
+    assert got["target"] == paths.ANCHOR and got["error"] is None
 
 
-def test_measure_survives_a_missing_mtr(monkeypatch):
-    monkeypatch.setattr(paths, "discover", lambda gw, timeout=30: ("198.51.100.1", "discovered"))
-
+def test_measure_raises_when_mtr_is_missing(monkeypatch):
     def boom(*a, **k):
         raise OSError("mtr: not found")
     monkeypatch.setattr(paths, "_run", boom)
     with pytest.raises(OSError):
-        paths.measure("192.0.2.1")
+        paths.measure()
 
 
 # ---------------------------------------------------------------- backend
@@ -92,7 +78,7 @@ def test_measure_survives_a_missing_mtr(monkeypatch):
 def path_rec(t_ms=None, boundary="isp", hops=None, **kw):
     t = t_ms or timeutil.now_ms() - 30_000
     rec = {"uuid": str(uuid.uuid4()), "agent_id": "pi", "agent_seq": None, "t_ms": t, "at": timeutil.iso(t),
-           "target": "198.51.100.1", "target_source": "discovered", "hop_count": 2, "boundary": boundary,
+           "target": "198.51.100.1", "target_source": "anchor", "hop_count": 2, "boundary": boundary,
            "first_bad_hop": 2 if boundary == "isp" else None, "sustained": int(boundary == "isp"), "gw_loss_pct": 0.0,
            "gw_rtt_ms": 0.6, "cycles": 20, "duration_ms": 21_000, "engine": "mtr", "engine_version": None,
            "iface": "eth0", "link_speed_mbps": 2500,
