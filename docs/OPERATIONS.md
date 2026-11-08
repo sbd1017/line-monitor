@@ -106,6 +106,29 @@ If it fails before archiving, nothing changes and it retries an hour later. The 
 the archive with everything else; re-import it any time with `SM import-legacy …` (see below) if you want it alongside
 the new data. It's kept out of the statistics anyway.
 
+## Virgin's own status checker
+
+While our probes say the line is down, the agent also asks Virgin's own service-status checker and records the
+answer, timestamped, on the outage. It is their acknowledgement inside the outage rather than a screenshot taken
+later, and it separates a known area fault from a fault that is only yours.
+
+Off unless both values are set. Create `/etc/systemd/system/speedagent.service.d/vm-status.conf`:
+
+```
+[Service]
+Environment=SPEEDAGENT_VM_POSTCODE=AB1 2CD
+Environment=SPEEDAGENT_VM_SURNAME=Yourname
+```
+
+then `sudo systemctl daemon-reload && sudo systemctl restart speedagent`. Keep it in a drop-in rather than the
+unit file, because deploys overwrite the unit.
+
+It asks after three failing probes, at most every half hour and four times per outage. The postcode and surname
+are not stored in any record, only the verdict. A 404 means the details did not match an account; anything
+unparseable is recorded as "no usable answer" rather than "no fault". The Evidence report shows the last answer
+beside each outage. It depends on an undocumented API, so it may break without notice; failure never affects
+monitoring.
+
 ## Automatic compensation
 
 Ofcom's scheme pays for a complete loss of service that is reported and not fixed within two full working days, at

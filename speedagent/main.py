@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from . import config as C
-from . import latest, paths, policy, probes, sysinfo
+from . import latest, paths, policy, probes, sysinfo, vmstatus
 from .engines.ookla import Ookla
 from .engines.simulated import Simulated
 from .engines.speedtestgo import SpeedtestGo
@@ -55,6 +55,9 @@ class Agent:
         self.status_dirty = threading.Event()
         self.last_probe = None
         self.last_path = None
+        self.vm_last_ms = 0
+        self.vm_streak = 0
+        self.vm_count = 0
         self.last_error = None
         self.sender_down = False
         self.decision = {}
@@ -143,8 +146,14 @@ class Agent:
         self.store.put("last_alive_ms", t)
         if prev and prev.get("link_speed_mbps") != rec.get("link_speed_mbps"):
             self.event("link_change", {"from_mbps": prev.get("link_speed_mbps"), "to_mbps": rec.get("link_speed_mbps")})
-        if prev and (prev["state"] in ("wan_down", "dns_fail")) != (rec["state"] in ("wan_down", "dns_fail")):
-            self.event("internet_" + ("down" if rec["state"] in ("wan_down", "dns_fail") else "up"), {"state": rec["state"]})
+        down = rec["state"] in ("wan_down", "dns_fail")
+        if prev and down != (prev["state"] in ("wan_down", "dns_fail")):
+            self.event("internet_" + ("down" if down else "up"), {"state": rec["state"]})
+        self.vm_streak = self.vm_streak + 1 if down else 0
+        if not down:
+            self.vm_count = 0
+        elif self.vm_streak >= vmstatus.TRIGGER_STREAK:
+            self.vm_check(rec["state"])
         self.status_dirty.set()
         return rec
 
@@ -181,6 +190,21 @@ class Agent:
         log.info("path %s %s (first bad hop %s)", stored.get("boundary"), stored.get("target"),
                  stored.get("first_bad_hop"))
         return stored
+
+    def vm_check(self, probe_state: str):
+        """Record what Virgin's own checker says, at most every half hour and four times per outage."""
+        if not (self.s.vm_postcode and self.s.vm_surname):
+            return
+        now = now_ms()
+        if not vmstatus.due(now, self.vm_last_ms, self.vm_count):
+            return
+        self.vm_last_ms, self.vm_count = now, self.vm_count + 1
+        try:
+            res = vmstatus.check(self.s.vm_postcode, self.s.vm_surname)
+        except Exception as exc:                    # never let the checker disturb monitoring
+            res = {"state": "unknown", "message": f"{type(exc).__name__}: {exc}"[:200], "http": None}
+        self.event("isp_status", {"state": res["state"], "message": res["message"], "http": res.get("http"),
+                                  "probe_state": probe_state})
 
     def sender_loop(self):
         backoff = 2

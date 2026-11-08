@@ -2,6 +2,9 @@
 import { api, qs, state, h, clear, section, seg, n, pct, fmtDT, fmtDate, dur, toast } from '../util.js';
 import { columns, Heatmap, lineChart } from '../viz.js';
 
+const CHECK_LABEL = { fault_reported: 'fault reported', no_fault: 'no fault reported', unidentified: 'account not found',
+  unknown: 'no usable answer' };
+
 const PRESETS = [['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days'], ['this_month', 'This month'], ['last_month', 'Last month'], ['this_year', 'This year'], ['all', 'All']];
 
 export async function mount(root, params) {
@@ -129,8 +132,10 @@ export async function mount(root, params) {
         ['Isolated poor results vs runs', `${n(r.answers.isolated_poor.isolated)} isolated · ${n(r.answers.isolated_poor.in_runs)} in runs`],
         ['Confirmed Internet outages (probes)', n(r.outages.length)]]),
       r.degradations.length ? T(r.degradations.slice(-25).reverse().map(d => [fmtDT(d.first_ms), `${d.count} tests`, `${n(d.min_dl, 0)} Mbps`, dur(d.sampled_span_ms)]), ['Degradation started', 'Tests', 'Lowest', 'Sampled span']) : null,
-      r.outages.length ? T(r.outages.slice(-25).reverse().map(o => [fmtDT(o.first_ms), `${dur(o.min_duration_ms)} – ${dur(o.max_duration_ms)}`, `${o.probes}`]), ['Outage started', 'Duration (bounds)', 'Failing probes']) : null,
-      h('p', { class: 'meta', text: 'Durations between tests are sampled spans, not proof of continuous speed. Outage durations are bounded by the probes either side.' })));
+      r.outages.length ? T(r.outages.slice(-25).reverse().map(o => [fmtDT(o.first_ms), `${dur(o.min_duration_ms)} – ${dur(o.max_duration_ms)}`, `${o.probes}`,
+        o.isp_check ? `${CHECK_LABEL[o.isp_check.state] || o.isp_check.state} · ${fmtDT(o.isp_check.at_ms)}` : 'not checked']),
+        ['Outage started', 'Duration (bounds)', 'Failing probes', "Virgin's own checker"]) : null,
+      h('p', { class: 'meta', text: 'Durations between tests are sampled spans, not proof of continuous speed. Outage durations are bounded by the probes either side. The last column is what the ISP said about the area while it was down, timestamped when asked; "no fault" is not proof that there is none.' })));
     const comp = r.compensation;
     if (comp && comp.n) {
       paper.append(sec('Automatic compensation (Ofcom scheme)',
