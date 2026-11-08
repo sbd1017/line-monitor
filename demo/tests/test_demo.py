@@ -191,3 +191,29 @@ def test_web_demo_is_open_and_fenced(built, monkeypatch):
     assert c.post("/speedtest/api/exports", json={"format": "csv", "range": "30d"}, headers={"x-csrf-token": csrf}).json()["ok"]
     assert c.get("/speedtest/enter", follow_redirects=False).status_code == 303
     assert c.post("/speedtest/agent/v1/records", json={}).status_code == 401
+
+
+def test_path_traces_every_quarter_hour_and_read_like_the_agents():
+    from speedagent import paths
+    w = World(ANCHOR, days=2)
+    _, recs = collect(w, end_of(ANCHOR))
+    traces = [r for s, r, _ in recs if s == "path"]
+    gaps = {b["t_ms"] // MIN - a["t_ms"] // MIN for a, b in zip(traces, traces[1:])}
+    assert gaps == {15}
+    for r in traces:
+        hops = json.loads(r["hops"])
+        assert (r["boundary"], r["first_bad_hop"], r["sustained"]) == paths.classify(hops, r["cycles"])
+        assert r["boundary"] in ("none", "unknown")       # no fault in these two days
+
+
+def test_path_traces_follow_the_story():
+    """Loss past the router in the fault week, the router silent when it restarts, nothing past it in an outage."""
+    w = World(ANCHOR)
+    sim = Sim(w)
+    seen = lambda t: sim._path(lambda *a: None, t)["boundary"]
+    fault = [seen(t) for t in range(w.fault.a, w.fault.b, 15 * MIN)]
+    assert fault.count("isp") > len(fault) // 4
+    lan = next(s for s in w.events if s.kind == "lan")
+    outage = next(s for s in w.events if s.kind == "outage")
+    assert seen(lan.a + MIN) == "lan"
+    assert seen(outage.a + MIN) == "unknown"

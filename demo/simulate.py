@@ -11,7 +11,7 @@ import hashlib
 import json
 from datetime import date
 
-from speedagent import policy
+from speedagent import paths, policy
 from speedmon import canonical, timeutil
 
 from .world import DAY, GO_SERVERS, MIN, SERVERS, TZ, World, h01, rng, rng_uuid
@@ -21,6 +21,12 @@ AGENT_VERSION = "1.0.0"
 OOKLA_VERSION = "1.2.0.84"
 GO_VERSION = "1.8.3"
 ANCHORS = ("1.1.1.1", "8.8.8.8")
+# The route a traceroute takes: the house router, the ISP's first router, the ISP's core (documentation-range
+# stand-ins), then the anchor. Same hops every time, like a real line.
+PATH_HOSTS = ("192.168.1.1", "10.53.36.1", "198.51.100.33", "198.51.100.70", "198.51.100.129", "198.51.100.161",
+              paths.ANCHOR)
+PATH_CYCLES = 20
+PATH_EVERY_MIN = 15
 ENGINE_FAILURES = {"engine_missing", "engine_error", "server_error", "timeout", "parse_error"}
 SCHEDULE = {"interval_min": 30, "confirm_count": 2, "confirm_delay_s": 120, "burst_interval_min": 10,
             "burst_max_min": 120, "recovery_count": 2, "max_tests_per_day": 96, "probe_interval_s": 60}
@@ -168,6 +174,8 @@ class Sim:
                     self.event(emit, t, type_, detail)
             if not self.w.span(self.next_probe, "offline"):
                 self._probe(emit, self.next_probe + 3 + int(h01(self.w.seed, "pj", self.next_probe) * 40))
+                if (self.next_probe // MIN) % PATH_EVERY_MIN == 0:
+                    self._path(emit, self.next_probe + 900 + int(h01(self.w.seed, "tj", self.next_probe) * 1500))
             self.next_probe += MIN
 
     def _probe(self, emit, t: int) -> dict:
@@ -212,6 +220,49 @@ class Sim:
             self.event(emit, t + 6, "internet_" + ("down" if down else "up"), {"state": rec["state"]})
         self.last_probe = {"state": rec["state"], "link": link, "t": t, "ext": rec.get("ext_rtt_ms"),
                            "gw": rec.get("gw_rtt_ms"), "loss": rec.get("ext_loss_pct")}
+        return rec
+
+    def _path(self, emit, t: int) -> dict:
+        """A traceroute past the house every quarter hour, read with the agent's own rules (speedagent/paths.py)."""
+        w = self.w
+        r = rng(w.seed, "path", t)
+        kind, _ = w.state(t)
+        base = w.latency(t)
+        n = len(PATH_HOSTS)
+        lost = [0] * n
+        silent = set()
+        if kind == "lan":
+            silent = set(range(n))                                     # the router itself doesn't answer
+        elif kind == "outage":
+            silent = set(range(1, n))                                  # the router answers, nothing past it does
+        elif w.fault.has(t) and r.random() < 0.45:
+            start = r.choice([1, 1, 2])                                # upstream noise: loss from Virgin's side onwards
+            k = r.randint(5, 9)
+            for i in range(start, n):
+                lost[i] = min(PATH_CYCLES, k + r.randint(0, 2))
+        elif r.random() < 0.05:
+            lost[r.choice([3, 4])] = r.randint(6, 12)                  # a busy router deprioritising the probe, then clear
+        hops = []
+        for i, host in enumerate(PATH_HOSTS):
+            if i in silent:
+                hops.append({"hop": i + 1, "host": None, "loss_pct": 100.0, "sent": PATH_CYCLES,
+                             "avg_ms": 0.0, "best_ms": 0.0, "worst_ms": 0.0})
+                continue
+            avg = abs(r.gauss(0.45, 0.06)) + 0.2 if i == 0 else base * (0.5 + 0.5 * i / (n - 1)) * r.gauss(1, 0.04)
+            hops.append({"hop": i + 1, "host": host, "loss_pct": round(100.0 * lost[i] / PATH_CYCLES, 1),
+                         "sent": PATH_CYCLES, "avg_ms": round(avg, 2), "best_ms": round(avg * 0.86, 2),
+                         "worst_ms": round(avg * 1.5 + r.uniform(0, 6 if i else 0.5), 2)})
+        if kind == "lan":
+            hops = hops[:1]
+        boundary, first_bad, sustained = paths.classify(hops, PATH_CYCLES)
+        gw = hops[0]
+        rec = {"uuid": rng_uuid(r), "agent_id": AGENT_ID, "agent_seq": self._next_seq(), "t_ms": t, "at": timeutil.iso(t),
+               "target": paths.ANCHOR, "target_source": "anchor", "hop_count": len(hops),
+               "hops": json.dumps(hops, separators=(",", ":")), "boundary": boundary, "first_bad_hop": first_bad,
+               "sustained": sustained, "gw_loss_pct": gw["loss_pct"], "gw_rtt_ms": gw["avg_ms"] if gw["host"] else None,
+               "cycles": PATH_CYCLES, "duration_ms": 20_000 + r.randint(200, 900), "engine": "mtr", "engine_version": None,
+               "iface": w.iface(t), "link_speed_mbps": w.link_speed(t), "error": None}
+        emit("path", rec)
         return rec
 
     # ------------------------------------------------------------ full tests

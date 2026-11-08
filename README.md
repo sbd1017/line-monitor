@@ -19,8 +19,8 @@ detailed view, for when you want to see exactly when, how often and by how much 
 
 - It shows three years of generated results for a made-up Virgin Media line, upgraded from M350 to Gig1
   partway through, with outages, a fault week and evening slowdowns built in.
-- It keeps running. New results arrive every minute as if the monitor were live, and "Run a test now" adds
-  one. No real speed tests are run.
+- It keeps running. New results and traceroutes arrive as if the monitor were live, and "Run a test now" adds
+  one. No real speed tests are run, and there are no timestamp receipts because nothing real is being signed.
 - Settings, notes and pausing are read-only.
 - Exports work (a full three-year XLSX takes about two minutes) and are deleted after two hours.
 - The data goes back to its starting point every night at 04:00 UK time.
@@ -65,14 +65,22 @@ something is wrong it lists the steps to take and what to say to your ISP.</sub>
 - **Statistics that don't overstate.** Percentages and averages use the scheduled tests only, because the extra
   tests deliberately sample the bad moments. Outage lengths are given as ranges, and the congestion check only
   says the evenings are slower when the numbers support it.
+- **Where the loss starts.** Every 15 minutes a traceroute runs past the house. Hop 1 is your own router, so loss
+  that starts there is inside the house, and loss that starts after it and carries on to the end is on the ISP's
+  side. A router in the middle that drops a few probes but has clean hops after it is only busy, so that case is
+  called unclear rather than blamed on anyone.
 - **Anomalies.** Tests far outside what's normal for that hour and type of day (weekday or weekend) are picked
   out against the previous four weeks, so a one-off drop stands out from the usual evening dip.
 - **Guarantee watch.** Under Virgin Media's terms, three days in a row below the minimum guaranteed speed lets
   you report it, and if it isn't fixed in 30 days you can leave without a fee. The dashboard and the XLSX track
   those runs of days for you.
+- **Automatic compensation.** For each outage, the Evidence report works out what Ofcom's automatic compensation
+  scheme should pay: the date you reported it (from a note), two full working days skipping weekends and bank
+  holidays, then the daily rate in force at the time. With no report noted it says so instead of guessing.
 - **Exports with no row limit.** A designed XLSX (summary with charts, daily and hourly tables, incidents,
   methodology, then every raw record, continuing onto a second sheet past Excel's million-row limit), CSV,
-  CSV.GZ, or a ZIP evidence pack that includes a small script to re-check every hash.
+  CSV.GZ, or a ZIP evidence pack with the traceroutes, the timestamp receipts and small scripts to re-check every hash
+  and every receipt.
 - **Notes on the timeline**, such as "router replaced" or "engineer visit", so the before and after show up in
   Compare.
 - **A fresh start** when a new package goes live: the old database is archived and verified, and a new one
@@ -83,8 +91,10 @@ something is wrong it lists the steps to take and what to say to your ISP.</sub>
 Every record is hashed when it's made and chained to the one before it, so changing or removing anything
 afterwards breaks the chain, and the integrity check at the bottom of the Evidence report shows it. The database refuses edits to raw records
 altogether. Corrections and notes go in a separate layer that's also kept with its history. The agent numbers
-every record it sends, so a missing one shows up as a gap. This is tamper evidence, not a certificate, so keep a
-copy of the chain head somewhere else from time to time.
+every record it sends, so a missing one shows up as a gap. Every hour, two public timestamp authorities (FreeTSA and DigiCert, RFC 3161, no account needed) also sign a
+statement of the current chain head. The receipts prove the records existed at that time, so even someone able to
+rewrite the whole database, including me, couldn't backdate them without it showing. The weekly check re-verifies
+every receipt. This is tamper evidence, not a certificate.
 
 ## How it fits together
 
@@ -111,6 +121,7 @@ only. Also:
 
 - Python 3.11 or newer.
 - The Ookla Speedtest CLI (its licence has to be accepted once) and, optionally, speedtest-go.
+- mtr for the traceroutes (`mtr-tiny` on Raspberry Pi OS) and openssl for the timestamp receipts.
 - systemd and nginx if you want it set up the way mine is.
 
 To try it on your own computer with demo data first:

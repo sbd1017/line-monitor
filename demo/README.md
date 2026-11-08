@@ -6,7 +6,7 @@ line, with new results arriving live. It runs the unchanged app (`speedmon/`) an
 | File | Role |
 |---|---|
 | `world.py` | the made-up line, as a deterministic function of time (seed + the day the history ends) |
-| `simulate.py` | runs the agent's own scheduling policy (`speedagent/policy.py`) against that line and emits the records the agent would send: tests with diagnostics, a probe a minute, events |
+| `simulate.py` | runs the agent's own scheduling policy (`speedagent/policy.py`) against that line and emits the records the agent would send: tests with diagnostics, a probe a minute, a traceroute every quarter hour, events |
 | `generate.py` | builds the database: the records through the app's canonical form and hash chain, plus the owner's layer (package history, notes, flags) |
 | `tick.py` | every minute: carries the simulated agent on to now through the backend's own ingest, and answers "Run a test now" |
 | `serve.py` | the web server: no entrance phrase (a per-visitor cookie and CSRF token instead), read-only settings and notes, limits on exports and full verifications, a demo banner |
@@ -20,7 +20,9 @@ deeper on weekdays and in winter, and a lighter daytime dip at weekends. About a
 to 6 hours, a DNS fault, two router restarts (local, not counted against the ISP), two days of a bad cable at
 100 Mb/s, the monitor itself off three times (a power cut, a move, updates), the odd failed test covered by the
 fallback engine, and a week-long ISP fault five months ago that keeps speeds under the guarantee for more than three
-days in a row, with confirmations and burst tests, a complaint and an engineer visit in the notes.
+days in a row, with confirmations and burst tests, a complaint and an engineer visit in the notes. The traceroutes follow the
+same story: loss past the router during the fault week, a silent router while it restarts, and now and then a busy
+router in the middle that drops a few probes and is read as unclear.
 
 ## Run it locally
 
