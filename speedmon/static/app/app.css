@@ -202,6 +202,18 @@ label.field small { color: var(--mute); font-size: 11px; }
 @media (max-width: 900px) { .ticker { grid-template-columns: repeat(2, 1fr); } .ticker > div:nth-child(odd) { border-left: 0; } .ticker > div { border-top: 1px solid var(--line); } }
 
 /* pulse */
+.paths { margin-top: 14px; display: grid; gap: 6px; }
+.path { display: grid; grid-template-columns: 108px 170px 1fr; gap: 10px; align-items: baseline; font: 500 11.5px var(--mono);
+  color: var(--ink-2); padding: 6px 0; box-shadow: inset 0 -1px var(--line); }
+.path .when { color: var(--ink-3); }
+.path .verdict { color: var(--ink-1); }
+.path.bad .verdict { color: var(--serious); }
+.path .hops { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.path .hop { white-space: nowrap; }
+.path .hop b { color: var(--ink-3); font-weight: 600; }
+.path .hop.lossy { color: var(--serious); }
+.path .hop.first { text-decoration: underline solid var(--serious); text-underline-offset: 3px; }
+.path .err { color: var(--warn); }
 .pulse { position: relative; height: 150px; margin-top: 18px; border-radius: 12px; background: linear-gradient(180deg, var(--surface), transparent); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
 .pulse canvas { width: 100%; height: 100%; display: block; }
 .pulse .legend { position: absolute; right: 14px; top: 10px; }

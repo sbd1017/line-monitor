@@ -144,6 +144,13 @@ def methodology(s: dict, packages: list | None = None, legacy: bool = False) -> 
          "the Internet did not are counted as outages. Failures caused by the Pi's own link or the router not "
          "answering are reported but not counted against the ISP. Speed statistics use successful tests only; a "
          "failure is never counted as 0 Mbps."),
+        ("Where loss starts", "Every "
+         f"{s.get('path_interval_min', 15)} minutes a traceroute to a fixed public anchor records each hop, so a "
+         "fault can be placed on one side of the router: hop 1 is the home router, everything after it is the ISP's "
+         "access network. Loss at hop 1 is the house. Loss that starts past hop 1 while hop 1 is clean, and that "
+         "carries to the last responding hop, is counted as the ISP's. A lossy middle hop that clears again is left "
+         "unclassified, because routers are allowed to deprioritise the probes. Fewer than eight cycles is also "
+         "unclassified. Hop addresses are masked to the first two octets."),
         ("Sampling, not continuous measurement", "Speed tests are samples. 'Longest sequence' figures count consecutive "
          "tests, and the period between the first and last test is labelled as the sampled span. It is not a claim "
          "that the speed held continuously in between. Outage durations come from the probes and are given as a "

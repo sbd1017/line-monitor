@@ -122,3 +122,12 @@ def test_paths_are_append_only(db):
     with pytest.raises(Exception):
         with db.tx() as conn:
             conn.execute("UPDATE paths SET boundary = 'none'")
+
+
+def test_live_api_sends_masked_hops(signed_in, db):
+    with db.tx() as conn:
+        ingest.ingest_batch(conn, "pi", [helpers.item("path", path_rec())], False)
+    body = signed_in.get("/speedtest/api/live").json()
+    hops = body["paths"][0]["hops"]
+    assert hops[0]["host"] == "192.0.x.x" and "192.0.2.1" not in json.dumps(body["paths"])
+    assert body["paths"][0]["boundary"] == "isp" and body["paths"][0]["first_bad_hop"] == 2

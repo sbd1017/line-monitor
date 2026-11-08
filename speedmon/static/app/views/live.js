@@ -1,4 +1,7 @@
 // Live: the connection right now, then everything the selected period says about it.
+const BOUNDARY = { none: 'clear', lan: 'starts at your router', isp: 'starts past the router',
+  unknown: 'unclear (router that does not reply)' };
+
 import { nextTest, WAITS, api, qs, state, h, clear, section, seg, n, mbps, pct, ms, fmtDT, fmtTime, fmtDay, ago, dur, countdown, RANGES, rangeMs, css, toast, bandOf, BAND_LABEL } from '../util.js';
 import * as bus from '../bus.js';
 import { sectionNav } from '../sectionnav.js';
@@ -43,6 +46,12 @@ export async function mount(root, params) {
   const pulseSec = section('01', 'Network pulse', 'external latency every minute between full tests · last 3 hours', pulseBox);
   pulseSec.right.append(pulseCap);
   page.append(pulseSec);
+
+  const pathBox = h('div', { class: 'paths' });
+  const pathCap = h('span', { class: 'sub' });
+  const pathSec = section('02', 'Where loss starts', 'a traceroute past the house every quarter hour · hop 1 is your router, everything after it is Virgin\'s · addresses masked', pathBox);
+  pathSec.right.append(pathCap);
+  page.append(pathSec);
 
   let lastTestUuid = null;
   const onLive = (d) => renderHero(d);
@@ -98,10 +107,32 @@ export async function mount(root, params) {
       const x = av?.[key] || {};
       tick(label, x.dl, x.n_ok ? `${n(x.n_ok)} tests · ${pct(x.pct_target, 0)} on target` : 'no tests');
     }
+    renderPaths(d.paths || []);
     pulse.set(d.pulse);
     const lp = d.pulse[d.pulse.length - 1];
     pulseCap.textContent = lp ? `now ${lp[1] == null ? 'no reply' : n(lp[1], 1) + ' ms'} · router ${lp[2] == null ? '—' : n(lp[2], 2) + ' ms'} · loss ${n(lp[3] ?? 0, 0)}% · ${lp[4]}` : 'no probes yet';
     renderSide(d);
+  }
+
+  function renderPaths(list) {
+    clear(pathBox);
+    if (!list.length) { pathCap.textContent = 'no trace yet'; pathBox.append(h('p', { class: 'sub', text: 'The first trace runs within the quarter hour.' })); return; }
+    const top = list[0];
+    pathCap.textContent = BOUNDARY[top.boundary] || top.boundary;
+    for (const p of list) {
+      const row = h('div', { class: 'path' + (p.boundary === 'isp' ? ' bad' : '') });
+      row.append(h('span', { class: 'when', text: `${fmtTime(p.t_ms)} ${ago(p.t_ms)}` }));
+      row.append(h('span', { class: 'verdict', text: BOUNDARY[p.boundary] || p.boundary }));
+      const hops = h('span', { class: 'hops' });
+      for (const hop of p.hops) {
+        hops.append(h('span', { class: 'hop' + (p.first_bad_hop === hop.hop ? ' first' : '') + (hop.loss_pct >= 20 ? ' lossy' : ''),
+          title: hop.host || 'no reply' },
+          h('b', { text: `h${hop.hop}` }), ` ${n(hop.loss_pct, 0)}% `, h('small', { text: hop.avg_ms ? `${n(hop.avg_ms, 1)}ms` : '' })));
+      }
+      row.append(hops);
+      if (p.error) row.append(h('span', { class: 'err', text: p.error }));
+      pathBox.append(row);
+    }
   }
 
   function renderSide(d) {
@@ -175,7 +206,7 @@ export async function mount(root, params) {
     limits: () => rangeMs('all', state.boot.bounds),
   });
   cleanups.push(() => chart.destroy());
-  const histSec = section('02', 'Speed history', 'drag to pan · ⌘/Ctrl-scroll or pinch to zoom · double-click to zoom in · click a point for its record',
+  const histSec = section('03', 'Speed history', 'drag to pan · ⌘/Ctrl-scroll or pinch to zoom · double-click to zoom in · click a point for its record',
     h('div', { class: 'chart toolbar' }, legend, h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, chart.lod, zoom)), chartBox);
   page.append(histSec);
   function resetChart() {
@@ -186,7 +217,7 @@ export async function mount(root, params) {
 
   // ------------------------------------------------------------ promise kept
   const promise = h('div', { class: 'promise dim' });
-  page.append(section('03', 'Promise kept', 'how often the line delivers what the package promises · scheduled tests only', promise));
+  page.append(section('04', 'Promise kept', 'how often the line delivers what the package promises · scheduled tests only', promise));
 
   // ------------------------------------------------------------ latency
   const latBox = h('div', { class: 'chart dim' });
@@ -197,7 +228,7 @@ export async function mount(root, params) {
   });
   cleanups.push(() => latChart.destroy());
   const latStats = h('div', { class: 'streaks' });
-  page.append(section('04', 'Latency', 'probe latency to external anchors (red = Internet unreachable) · speed-test ping & jitter below',
+  page.append(section('05', 'Latency', 'probe latency to external anchors (red = Internet unreachable) · speed-test ping & jitter below',
     h('div', { class: 'chart toolbar' }, h('div', { class: 'legend' }, h('span', {}, h('i', { style: { background: css('--lat') } }), 'external RTT (median of anchors)'),
       h('span', {}, h('i', { class: 'box', style: { background: css('--crit') } }), 'outage'), h('span', {}, h('i', { class: 'box', style: { background: css('--offline') } }), 'Pi/LAN fault')), latChart.lod),
     latBox, latStats));
@@ -211,14 +242,14 @@ export async function mount(root, params) {
     tlLegend.append(h('span', {}, h('i', { class: 'box', style: { background: css(c) } }), TL_LABEL[k]));
   }
   const incidents = h('div', { class: 'grid g2', style: { marginTop: '18px' } });
-  page.append(section('05', 'Reliability', 'what the line was doing between tests · a powered-off Pi shows as monitor offline, never as an ISP outage', tlBox, tlLegend, incidents));
+  page.append(section('06', 'Reliability', 'what the line was doing between tests · a powered-off Pi shows as monitor offline, never as an ISP outage', tlBox, tlLegend, incidents));
 
   // ------------------------------------------------------------ patterns
   const heatBox = h('div', { class: 'heat dim' });
   const heat = new Heatmap(heatBox, { onDay: (d) => window.__go('/day/' + d) });
   cleanups.push(() => heat.destroy());
   const hourBox = h('div', { class: 'dim' }), dowBox = h('div', { class: 'dim' }), congBox = h('div', {});
-  page.append(section('06', 'When does it slow down?', 'scheduled tests in local time',
+  page.append(section('07', 'When does it slow down?', 'scheduled tests in local time',
     congBox,
     h('div', { class: 'grid g-7-5', style: { marginTop: '18px' } },
       h('div', { class: 'block' }, h('h3', { text: 'Day × hour' }), h('div', { class: 'cap', text: 'mean download per hour of each day · click a row to open that day' }), heatBox),
@@ -228,7 +259,7 @@ export async function mount(root, params) {
 
   // ------------------------------------------------------------ distribution
   const histBox = h('div', { class: 'dim' }), pBox = h('div', { class: 'dim' }), pUpBox = h('div', { class: 'dim' }), histUpBox = h('div', { class: 'dim' });
-  page.append(section('07', 'Distribution', 'where results cluster · percentiles shown only where the sample supports them',
+  page.append(section('08', 'Distribution', 'where results cluster · percentiles shown only where the sample supports them',
     h('div', { class: 'grid g2' },
       h('div', { class: 'block' }, h('h3', { text: 'Download distribution' }), h('div', { class: 'cap', text: 'share of scheduled tests per 25 Mbps band' }), histBox,
         h('h3', { style: { marginTop: '18px' }, text: 'Download percentiles' }), h('div', { class: 'cap', text: 'dark box P25–P75 · light box P10–P90' }), pBox),
@@ -240,13 +271,13 @@ export async function mount(root, params) {
   const calLegend = h('div', { class: 'legend', style: { marginTop: '8px' } });
   for (const [k, c] of [['median on target', '--div-p3'], ['just below target', '--div-p1'], ['at the degraded threshold', '--div-0'], ['degraded', '--div-n2'], ['severe / failed', '--div-n3'], ['no data', '--surface-2']]) calLegend.append(h('span', {}, h('i', { class: 'box', style: { background: css(c) } }), k));
   calLegend.append(h('span', {}, h('i', { class: 'dot', style: { background: css('--crit') } }), 'outage ≥ 2 min'));
-  page.append(section('08', 'Every day', 'each square is a day, coloured by its median download · click to drill in', calBox, calLegend));
+  page.append(section('09', 'Every day', 'each square is a day, coloured by its median download · click to drill in', calBox, calLegend));
   const dnaRow = h('div', { class: 'dna-row' });
-  page.append(section('09', 'Connection DNA', 'a fingerprint per period: spoke length = median speed per hour, ribbon = P10–P90, thickness = jitter, core ring = latency, red dots = failures · click for the numbers', dnaRow));
+  page.append(section('10', 'Connection DNA', 'a fingerprint per period: spoke length = median speed per hour, ribbon = P10–P90, thickness = jitter, core ring = latency, red dots = failures · click for the numbers', dnaRow));
   const anomBox = h('div', { class: 'list' });
   const ANOM_FEW = 3;                                     // the latest few; the rest behind Show more
   let anomOpen = false;
-  page.append(section('10', 'Anomalies', 'tests far outside what is normal for that hour and day type (robust z ≥ 3.5 against the previous 28 days)', anomBox));
+  page.append(section('11', 'Anomalies', 'tests far outside what is normal for that hour and day type (robust z ≥ 3.5 against the previous 28 days)', anomBox));
 
   // ------------------------------------------------------------ data
   async function refresh() {

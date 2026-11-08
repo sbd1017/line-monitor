@@ -244,6 +244,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def err(message: str, status: int = 400) -> JSONResponse:
         return JSONResponse({"error": message}, status_code=status)
 
+    def _mask_host(host: str | None) -> str | None:
+        """Hop addresses never reach the browser unmasked."""
+        if not host:
+            return host
+        parts = host.split(".")
+        return ".".join(parts[:2] + ["x", "x"]) if len(parts) == 4 else host
+
     def data_version(conn) -> str:
         """Changes whenever a cached figure could: a new test or its diagnostics (they arrive as separate records, and
         decide the measurement-quality labels), a flag, or a setting."""
@@ -373,6 +380,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                   "source IN ('agent','synthetic') ORDER BY t_ms DESC LIMIT 12").fetchall()
             pulse = conn.execute("SELECT t_ms, ext_rtt_ms, gw_rtt_ms, ext_loss_pct, state FROM probes WHERE t_ms >= ? "
                                  "ORDER BY t_ms", (now - 3 * timeutil.HOUR_MS,)).fetchall()
+            # hop addresses are masked in the browser; the DB keeps them
+            paths = []
+            for r in conn.execute("SELECT t_ms, boundary, first_bad_hop, sustained, hop_count, hops, error FROM paths "
+                                  "ORDER BY t_ms DESC LIMIT 12"):
+                try:
+                    hops = json.loads(r["hops"] or "[]")
+                except ValueError:
+                    hops = []
+                paths.append({"t_ms": r["t_ms"], "boundary": r["boundary"], "first_bad_hop": r["first_bad_hop"],
+                              "sustained": r["sustained"], "hop_count": r["hop_count"], "error": r["error"],
+                              "hops": [{"hop": x.get("hop"), "host": _mask_host(x.get("host")),
+                                        "loss_pct": x.get("loss_pct"), "avg_ms": x.get("avg_ms"),
+                                        "sent": x.get("sent")} for x in hops]})
             mv = data_version(conn)
 
             def averages():
@@ -428,7 +448,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "capacity": quality.capacity(link_now, s["package"]),
                 "last_ok": judged(last_ok),
                 "recent": [dict(r) for r in recent], "rolling5": (sum(rolling) / len(rolling)) if rolling else None,
-                "averages": avgs, "agent": status, "pulse": [list(r) for r in pulse], "health": health}
+                "averages": avgs, "agent": status, "pulse": [list(r) for r in pulse], "health": health,
+                "paths": paths}
 
     @app.get(BASE + "/api/summary")
     def summary_view(request: Request):
