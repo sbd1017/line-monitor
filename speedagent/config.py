@@ -84,8 +84,6 @@ class AgentSettings:
     test_timeout_s: int = 150
     simulate: str | None = None                                 # development only: simulated engine profile
     latest_file: Path | None = None                             # public summary of the latest test (latest.py)
-    vm_postcode: str = ""                                       # Virgin's own status checker, off unless both set
-    vm_surname: str = ""
 
     @property
     def db_path(self) -> Path:
@@ -126,8 +124,6 @@ def load() -> AgentSettings:
         s.anchors = tuple(a.strip() for a in e["SPEEDAGENT_ANCHORS"].split(",") if a.strip())
     s.dns_suffix = e.get("SPEEDAGENT_DNS_SUFFIX", s.dns_suffix)
     s.http_check = e.get("SPEEDAGENT_HTTP_CHECK", s.http_check)
-    s.vm_postcode = e.get("SPEEDAGENT_VM_POSTCODE", "")
-    s.vm_surname = e.get("SPEEDAGENT_VM_SURNAME", "")
     if e.get("SPEEDAGENT_LATEST_FILE"):
         s.latest_file = Path(e["SPEEDAGENT_LATEST_FILE"])
     if s.env != "production" and e.get("SPEEDAGENT_SIMULATE"):

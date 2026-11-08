@@ -452,19 +452,6 @@ def degradation_incidents(tests: list[Measurement], s: dict, min_tests: int = 2)
     return out
 
 
-def isp_check(conn, first_ms: int, until_ms: int) -> dict | None:
-    """The latest thing the ISP's own status checker said during an outage, if the agent asked it."""
-    row = conn.execute("SELECT t_ms, detail FROM events WHERE type = 'isp_status' AND t_ms >= ? AND t_ms <= ? "
-                       "ORDER BY t_ms DESC LIMIT 1", (first_ms, until_ms + 3_600_000)).fetchone()
-    if not row:
-        return None
-    try:
-        detail = json.loads(row["detail"] or "{}")
-    except ValueError:
-        return None
-    return {"at_ms": row["t_ms"], "state": detail.get("state"), "message": detail.get("message")}
-
-
 def outage_incidents(conn, from_ms: int, to_ms: int, min_probes: int = 2) -> list[dict]:
     """Confirmed Internet outages from the probes: >= min_probes consecutive probes where the router answered but
     the Internet didn't (wan_down / dns_fail). Duration bounds: at least first->last failing probe, at most
@@ -490,7 +477,7 @@ def outage_incidents(conn, from_ms: int, to_ms: int, min_probes: int = 2) -> lis
         after = conn.execute(f"SELECT min(t_ms) FROM probes WHERE t_ms > ? AND {good}", (b,)).fetchone()[0]
         out.append({"kind": "outage", "first_ms": a, "last_ms": b, "probes": len(run), "states": sorted({r[1] for r in run}),
                     "min_duration_ms": b - a, "max_duration_ms": (after - before) if (after and before) else None,
-                    "before_ms": before, "after_ms": after, "isp_check": isp_check(conn, a, after or b)})
+                    "before_ms": before, "after_ms": after})
     return out
 
 
