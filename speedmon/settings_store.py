@@ -17,6 +17,7 @@ HARD = {
     "max_confirm_count": 5,
     "max_tests_per_day": 300,
     "min_probe_interval_s": 10,
+    "min_path_interval_min": 5,
 }
 
 
@@ -67,6 +68,8 @@ FIELDS: list[Field] = [
     # probes
     Field("probe_interval_s", 60, "int", "probes", "Connectivity probe every (seconds)",
           "Light: a few pings, one DNS lookup, one tiny HTTPS request.", HARD["min_probe_interval_s"], 600),
+    Field("path_interval_min", 15, "int", "probes", "Trace the path to the first router beyond the house every (minutes)",
+          "Shows where loss starts: at the router (the house) or past it (the ISP).", HARD["min_path_interval_min"], 1440),
     # engines
     Field("engine", "ookla", "choice", "engines", "Primary engine", "", choices=("ookla", "speedtest-go")),
     Field("fallback_engine", "speedtest-go", "choice", "engines", "Fallback engine (when the primary errors)",

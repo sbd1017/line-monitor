@@ -43,6 +43,11 @@ FIELDS = {
         "link_speed_mbps",
     ),
     "event": ("uuid", "agent_id", "agent_seq", "t_ms", "at", "type", "detail"),
+    "path": (
+        "uuid", "agent_id", "agent_seq", "t_ms", "at", "target", "target_source", "hop_count", "hops", "boundary",
+        "first_bad_hop", "sustained", "gw_loss_pct", "gw_rtt_ms", "cycles", "duration_ms", "engine", "engine_version",
+        "iface", "link_speed_mbps", "error",
+    ),
 }
 
 
@@ -53,7 +58,7 @@ REAL_FIELDS = frozenset((
     "ul_latency_ms", "packet_loss_pct", "distance_km", "cpu_load1", "cpu_load5", "cpu_temp_c", "mem_available_pct",
     "swap_used_pct", "background_rx_mbps", "background_tx_mbps", "pretest_rx_mbps", "pretest_tx_mbps",
     "gateway_rtt_ms", "gateway_loss_pct", "external_rtt_ms", "external_loss_pct", "pi_uptime_s", "gw_rtt_ms",
-    "gw_loss_pct", "ext_rtt_ms", "ext_loss_pct", "dns_ms", "http_ms",
+    "gw_loss_pct", "ext_rtt_ms", "ext_loss_pct", "dns_ms", "http_ms", "gw_rtt_ms", "gw_loss_pct",
 ))
 
 
@@ -62,6 +67,7 @@ INT_FIELDS = frozenset((
     "agent_seq", "t_ms", "duration_ms", "utc_offset_min", "download_bytes", "upload_bytes", "download_ms", "upload_ms",
     "link_speed_mbps", "rx_errors_delta", "tx_errors_delta", "rx_dropped_delta", "tx_dropped_delta", "rx_bytes_delta",
     "tx_bytes_delta", "window_ms", "interval_s", "dns_ok", "http_ok", "link_up", "public_ip_changed",
+    "hop_count", "first_bad_hop", "sustained", "cycles",
 ))
 
 

@@ -3,7 +3,7 @@
 Every record is written here first (synchronous=FULL), with its sequence number and hash, before any network
 activity. Delivery only marks a record 'sent' after the backend acknowledges it (accepted or duplicate), so a
 crash, reboot or unreachable backend never loses a record. Measurements stay here permanently as a second
-copy; sent probes and events are pruned after 60 days (the backend and its backups hold them).
+copy; sent probes, path traces and events are pruned after 60 days (the backend and its backups hold them).
 """
 from __future__ import annotations
 
@@ -113,5 +113,5 @@ class Store:
     def prune(self, keep_days: int = 60) -> int:
         cutoff = int(time.time() * 1000) - keep_days * 86_400_000
         with self.lock:
-            return self.conn.execute("DELETE FROM outbox WHERE status = 'sent' AND stream IN ('probe', 'event') AND sent_ms < ?",
+            return self.conn.execute("DELETE FROM outbox WHERE status = 'sent' AND stream IN ('probe', 'event', 'path') AND sent_ms < ?",
                                      (cutoff,)).rowcount

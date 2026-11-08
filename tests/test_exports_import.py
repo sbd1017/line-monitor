@@ -7,8 +7,9 @@ import subprocess
 import sys
 import zipfile
 
-from speedmon import importer, integrity, synthetic, timeutil
+from speedmon import importer, ingest, integrity, synthetic, timeutil
 from speedmon.exports import jobs
+from tests import helpers
 
 
 def run_export(db, settings, fmt, a=0, b=None, **params):
@@ -185,3 +186,18 @@ def test_zip_pack_carries_checkable_anchors(db, settings, tmp_path, tsa, monkeyp
     p.write_text("\n".join(lines) + "\n")
     r = subprocess.run([sys.executable, "-I", str(out / "verify_anchors.py"), str(out)], capture_output=True, text=True)
     assert "BROKEN" in r.stdout and "PROBLEM" in r.stdout, r.stdout
+
+
+def test_paths_csv_masks_hop_hosts_unless_ip_is_asked_for(db, settings):
+    from tests.test_paths import path_rec
+    with db.tx() as c:
+        ingest.ingest_batch(c, "pi", [helpers.item("path", path_rec())], False)
+    _, path = run_export(db, settings, "zip")
+    with zipfile.ZipFile(path) as z:
+        masked = z.read("paths.csv").decode()
+    assert "198.51.x.x" in masked and "198.51.100.1" not in masked
+    assert masked.splitlines()[0].startswith("path_uuid,boundary") is False
+    assert "path_uuid" in masked.splitlines()[0] and "loss_pct" in masked.splitlines()[0]
+    _, path = run_export(db, settings, "zip", include_public_ip=True)
+    with zipfile.ZipFile(path) as z:
+        assert "198.51.100.1" in z.read("paths.csv").decode()

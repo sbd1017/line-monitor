@@ -19,13 +19,15 @@ HARD = {
     "max_confirm_count": 5,
     "max_tests_per_day": 300,
     "min_probe_interval_s": 10,
+    "min_path_interval_min": 5,
     "min_manual_gap_s": 120,
 }
 
 DEFAULT_SCHEDULE = {
     "interval_min": 30, "confirm_count": 2, "confirm_delay_s": 120, "burst_interval_min": 10, "burst_max_min": 120,
     "recovery_count": 2, "max_tests_per_day": 96, "paused_until": None, "quiet_threshold_mbps": 50.0,
-    "quiet_max_defer": 3, "probe_interval_s": 60, "engine": "ookla", "fallback_engine": "speedtest-go",
+    "quiet_max_defer": 3, "probe_interval_s": 60, "path_interval_min": 15, "engine": "ookla",
+    "fallback_engine": "speedtest-go",
     "server_mode": "auto", "servers": [], "degraded_down": 500.0, "target_down": 900.0, "severe_down": 200.0,
     "timezone": "Europe/London",
 }

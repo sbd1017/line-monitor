@@ -13,7 +13,8 @@ import statistics
 from . import canonical, rollups, timeutil
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
-STREAM_TABLE = {"measurement": "measurements", "diagnostic": "diagnostics", "probe": "probes", "event": "events"}
+STREAM_TABLE = {"measurement": "measurements", "diagnostic": "diagnostics", "probe": "probes", "event": "events",
+                "path": "paths"}
 MAX_TEXT = 4000
 MAX_RAW = 200_000
 
@@ -22,6 +23,8 @@ ENUMS = {
     "kind": {"scheduled", "confirmation", "burst", "manual", "fallback", "retry"},
     "status": {"ok", "failed"},
     "state": {"ok", "degraded", "wan_down", "dns_fail", "lan_fault", "link_down"},
+    "boundary": {"none", "lan", "isp", "unknown"},
+    "target_source": {"discovered", "anchor", "none"},
 }
 REQUIRED = {
     "measurement": ("uuid", "agent_id", "source", "kind", "engine", "t_ms", "started_at", "tz_name", "utc_offset_min",
@@ -29,6 +32,7 @@ REQUIRED = {
     "diagnostic": ("uuid", "measurement_uuid", "agent_id", "t_ms"),
     "probe": ("uuid", "agent_id", "t_ms", "at", "interval_s", "state"),
     "event": ("uuid", "agent_id", "t_ms", "at", "type"),
+    "path": ("uuid", "agent_id", "t_ms", "at", "boundary"),
 }
 
 
@@ -75,7 +79,7 @@ def _check_types(stream: str, rec: dict, allow_synthetic: bool) -> None:
         for key in ("download_mbps", "upload_mbps"):
             if rec.get(key) is not None and not 0 <= rec[key] <= 100_000:
                 raise Rejected(f"{key} out of range")
-    if stream in ("probe", "event") and abs(timeutil.parse_iso_ms(rec["at"]) - rec["t_ms"]) > 1000:
+    if stream in ("probe", "event", "path") and abs(timeutil.parse_iso_ms(rec["at"]) - rec["t_ms"]) > 1000:
         raise Rejected("at and t_ms disagree")
 
 

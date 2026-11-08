@@ -185,6 +185,42 @@ def _table_csv(zf, name, conn, sql, args, fmt=None) -> int:
     return n
 
 
+def _mask_host(host: str | None) -> str | None:
+    if not host:
+        return host
+    parts = host.split(".")
+    return ".".join(parts[:2] + ["x", "x"]) if len(parts) == 4 else host
+
+
+def _paths_csv(zf, conn, a: int, b: int, include_ips: bool) -> int:
+    """One row per hop. Hop 1 is the house; anything after it is the ISP's. Hosts masked unless IPs are shared."""
+    n = 0
+    with zf.open("paths.csv", "w", force_zip64=True) as raw:
+        fh = io.TextIOWrapper(raw, encoding="utf-8", newline="")
+        w = csv.writer(fh)
+        w.writerow(["path_uuid", "at", "t_ms", "boundary", "first_bad_hop", "sustained", "target_source", "hop",
+                    "host", "loss_pct", "sent", "avg_ms", "best_ms", "worst_ms", "error"])
+        for r in conn.execute("SELECT * FROM paths WHERE t_ms >= ? AND t_ms < ? ORDER BY t_ms, id", (a, b)):
+            try:
+                hops = json.loads(r["hops"] or "[]")
+            except ValueError:
+                hops = []
+            if not hops:
+                w.writerow([r["uuid"], r["at"], r["t_ms"], r["boundary"], r["first_bad_hop"], r["sustained"],
+                            r["target_source"], "", "", "", "", "", "", "", r["error"]])
+                n += 1
+                continue
+            for hop in hops:
+                w.writerow([r["uuid"], r["at"], r["t_ms"], r["boundary"], r["first_bad_hop"], r["sustained"],
+                            r["target_source"], hop.get("hop"), hop.get("host") if include_ips else _mask_host(hop.get("host")),
+                            hop.get("loss_pct"), hop.get("sent"), hop.get("avg_ms"), hop.get("best_ms"),
+                            hop.get("worst_ms"), r["error"]])
+                n += 1
+        fh.flush()
+        fh.detach()
+    return n
+
+
 def _zip_anchors(zf, conn, max_index: int) -> int:
     """Latest receipts, newest first, so a pack can be dated by a third party. 200 is plenty for a dispute."""
     rows = conn.execute("SELECT id, provider, head_index, head_hash, created_at, statement, statement_sha256, token "
@@ -238,6 +274,7 @@ def write_zip(conn, s, settings, a, b, label, params, path: Path, progress=None)
                                          " ORDER BY l.chain_index", covered_args)
         # Receipts taken after the pack's last covered entry cannot be tied to these data, so leave them out.
         top = conn.execute("SELECT max(l.chain_index) FROM ledger l WHERE " + covered, covered_args).fetchone()[0]
+        files["paths.csv"] = _paths_csv(zf, conn, a, b, bool(params.get("include_public_ip")))
         files["diagnostics.csv"] = _table_csv(
             zf, "diagnostics.csv", conn,
             "SELECT " + ", ".join(c for c in canonical.FIELDS["diagnostic"] if c != "public_ip" or params.get("include_public_ip"))
@@ -293,6 +330,7 @@ Files
   annotations.csv          the owner's timeline notes (they never alter any measurement)
   owner_flags.csv          the owner's per-test corrections, e.g. "exclude: I was downloading a game"
   raw_engine_output.jsonl  the speed-test engine's own output for each test (local IPs and MAC removed at source)
+  paths.csv                traceroute hops to the first router beyond the house, with where the loss starts
   ledger.csv               hash-chain entries for the records above
   report.json              the summary figures shown in the report
   integrity.json           the full integrity check result

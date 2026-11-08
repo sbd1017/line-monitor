@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from . import config as C
-from . import latest, policy, probes, sysinfo
+from . import latest, paths, policy, probes, sysinfo
 from .engines.ookla import Ookla
 from .engines.simulated import Simulated
 from .engines.speedtestgo import SpeedtestGo
@@ -54,6 +54,7 @@ class Agent:
         self.live_lock = threading.Lock()
         self.status_dirty = threading.Event()
         self.last_probe = None
+        self.last_path = None
         self.last_error = None
         self.sender_down = False
         self.decision = {}
@@ -147,6 +148,37 @@ class Agent:
         self.status_dirty.set()
         return rec
 
+    def path_loop(self):
+        """Traceroute to the first router beyond the house, on its own slow cadence."""
+        while not self.stop.is_set():
+            iv = self.cfg["path_interval_min"] * 60
+            if self.stop.wait(max(30, iv - (time.time() % iv))):
+                return
+            if self.live.get("state") == "testing":
+                continue                                # a traceroute mid-test would measure the test's own queue
+            self.path_once()
+
+    def path_once(self) -> dict:
+        self._route()
+        t = now_ms()
+        rec = {"uuid": str(uuidlib.uuid4()), "agent_id": self.s.agent_id, "t_ms": t, "at": iso(t),
+               "engine": "mtr", "engine_version": None, "iface": self.iface,
+               "link_speed_mbps": sysinfo.link(self.iface)["link_speed_mbps"]}
+        started = time.monotonic()
+        try:
+            rec.update(paths.measure(self.gateway))
+        except Exception as exc:                        # a missing or wedged mtr is a path failure, not an agent one
+            rec.update(target=None, target_source="none", hops=None, hop_count=0, boundary="unknown",
+                       first_bad_hop=None, sustained=0, gw_loss_pct=None, gw_rtt_ms=None, cycles=0,
+                       error=f"{type(exc).__name__}: {exc}"[:300])
+        rec["duration_ms"] = int((time.monotonic() - started) * 1000)
+        stored = self.store.add("path", rec)
+        self.send_now.set()
+        self.last_path = stored
+        log.info("path %s %s (first bad hop %s)", stored.get("boundary"), stored.get("target"),
+                 stored.get("first_bad_hop"))
+        return stored
+
     def sender_loop(self):
         backoff = 2
         while not self.stop.is_set():
@@ -225,6 +257,8 @@ class Agent:
                          "iface": self.iface},
                 "last_probe": {"t": lp.get("t_ms"), "state": lp.get("state"), "ext": lp.get("ext_rtt_ms"),
                                "gw": lp.get("gw_rtt_ms"), "loss": lp.get("ext_loss_pct")},
+                "last_path": {"t": (self.last_path or {}).get("t_ms"), "boundary": (self.last_path or {}).get("boundary"),
+                              "first_bad_hop": (self.last_path or {}).get("first_bad_hop")},
                 "last_error": self.last_error, "uptime_s": sysinfo.uptime_s(), "throttled": sysinfo.throttled()}
 
     # ------------------------------------------------------------ full tests
@@ -397,6 +431,7 @@ class Agent:
         self.start_events()
         self.set_live(state="idle")
         threading.Thread(target=self.probe_loop, daemon=True, name="probe_loop").start()
+        threading.Thread(target=self.path_loop, daemon=True, name="path_loop").start()
         self.store.prune()
         last_prune = time.monotonic()
         while not self.stop.is_set():
