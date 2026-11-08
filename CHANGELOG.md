@@ -2,6 +2,15 @@
 
 What changed in each release of Line Monitor, newest first.
 
+## v1.8.0 - 2026-11-08
+
+- Timestamp receipts: every hour two public RFC 3161 authorities (FreeTSA and DigiCert) sign a statement of the ledger head, so records can be shown to have existed at that time; stored outside the chain, append-only, re-verified to a trusted root by the weekly check, with `anchor`, `anchors` and `verify-anchors` commands and up to 200 receipts plus a checker in every ZIP pack
+- Where loss starts: a traceroute past the house every 15 minutes (mtr), kept as its own append-only record stream and read as clear, at the router, past the router or unclear; shown on Live, explained in the methodology, and exported as paths.csv with addresses masked unless public IPs are included
+- Evidence: expected automatic compensation for each outage under Ofcom's scheme, from the report note, two full working days that skip weekends and bank holidays, and the daily rate in force at the time; an outage with no report is listed as unclaimed
+- Operations: recording the ISP's own status answer during an outage as an isp note, which also starts the compensation clock
+- Demo: a traceroute every quarter hour that follows the story (loss past the router in the fault week, a silent router while it restarts, the odd busy router)
+- README: where loss starts, timestamp receipts, automatic compensation, and mtr and openssl in the requirements
+
 ## v1.7.0 - 2026-11-03
 
 - Simple: a new page that answers "am I getting what I pay for?" in plain words, with three numbers (what you pay for, what you usually get, your slowest test), when it is slow, whether it drops out, the ISP's guarantee, and the steps to take and what to say when something is wrong
