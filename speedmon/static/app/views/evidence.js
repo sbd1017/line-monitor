@@ -131,6 +131,16 @@ export async function mount(root, params) {
       r.degradations.length ? T(r.degradations.slice(-25).reverse().map(d => [fmtDT(d.first_ms), `${d.count} tests`, `${n(d.min_dl, 0)} Mbps`, dur(d.sampled_span_ms)]), ['Degradation started', 'Tests', 'Lowest', 'Sampled span']) : null,
       r.outages.length ? T(r.outages.slice(-25).reverse().map(o => [fmtDT(o.first_ms), `${dur(o.min_duration_ms)} – ${dur(o.max_duration_ms)}`, `${o.probes}`]), ['Outage started', 'Duration (bounds)', 'Failing probes']) : null,
       h('p', { class: 'meta', text: 'Durations between tests are sampled spans, not proof of continuous speed. Outage durations are bounded by the probes either side.' })));
+    const comp = r.compensation;
+    if (comp && comp.n) {
+      paper.append(sec('Automatic compensation (Ofcom scheme)',
+        T([['Confirmed outages in this period', n(comp.n)], ['Reported, so claimable', n(comp.n_claimable)],
+          ['Expected credit', `£${n(comp.amount, 2)}`], ['Not reported, so unclaimed', n(comp.n_unreported)]]),
+        T(comp.incidents.slice(-25).reverse().map(x => [fmtDT(x.first_ms), `${dur(x.min_duration_ms)} – ${dur(x.max_duration_ms)}`,
+          x.reported_ms ? fmtDT(x.reported_ms) : 'not noted', x.days ? `${x.days} at £${n(x.rate, 2)}` : '—',
+          x.amount ? `£${n(x.amount, 2)}` : '—', x.reason]), ['Outage started', 'Duration (bounds)', 'Reported', 'Days', 'Credit', 'Why']),
+        h('p', { class: 'meta', text: comp.note })));
+    }
     const g = r.guarantee;
     if (g && g.applies) {
       paper.append(sec(`Minimum guaranteed download speed (${g.mgds} Mbps)`,

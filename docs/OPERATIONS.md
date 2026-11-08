@@ -106,6 +106,22 @@ If it fails before archiving, nothing changes and it retries an hour later. The 
 the archive with everything else; re-import it any time with `SM import-legacy …` (see below) if you want it alongside
 the new data. It's kept out of the statistics anyway.
 
+## Automatic compensation
+
+Ofcom's scheme pays for a complete loss of service that is reported and not fixed within two full working days, at
+the daily rate in force, from then until it is fixed. It is paid automatically, without asking. It does not cover
+slowness, so only probe-confirmed outages are counted and degradation incidents never appear.
+
+The clock needs a report. Record one with a Notes entry of category `complaint` (or `isp`/`outage`) at the time you
+call. Notes land on the timeline and this looks for the earliest one inside or up to a fortnight after an outage,
+so a slightly late note still works. An outage with no note is listed as unclaimed rather than assumed.
+
+The Evidence page shows, per outage: when it ran, whether a report was noted, the days counted, the rate applied and
+the expected credit, with the reason when there is none. Working days skip weekends and England and Wales bank
+holidays. Rates live in `speedmon/compensation.py` and are keyed by the date they took effect, so a new April
+uprating is a one-line addition and old incidents keep their old rate. Amounts are a figure to check against a
+bill, not a ruling.
+
 ## Guarantee watch
 Under Virgin Media's Gig1 terms, if download speed falls below the **minimum guaranteed 565 Mbps** on **3 or more consecutive
 days** (continuously or intermittently) and Virgin can't fix it within 30 days of you reporting it, you may leave

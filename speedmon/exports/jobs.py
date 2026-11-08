@@ -16,7 +16,7 @@ import traceback
 import uuid as uuidlib
 from pathlib import Path
 
-from .. import analytics, integrity, quality, rollups, settings_store, timeutil
+from .. import analytics, compensation, integrity, quality, rollups, settings_store, timeutil
 from ..config import VERSION
 
 FORMATS = ("xlsx", "csv", "csv.gz", "zip")
@@ -96,6 +96,7 @@ def report_data(conn, s: dict, a: int, b: int, label: str) -> dict:
         "packages": sm["packages"],
         "summary": sm, "time": ta, "daily": days, "hourly": hours, "weekday": dows,
         "degradations": degr, "outages": outs, "congestion": cong, "coverage": cov,
+        "compensation": compensation.assess(conn, a, b, s["timezone"], incidents=outs),
         "histogram": analytics.histogram([x.dl for x in bt if x.ok], 2 * analytics.bin_width(sm["package"]["advertised_down"]),
                                          sm["package"]["advertised_down"]),
         "latency": probe_latency(conn, a, b), "guarantee": analytics.guarantee_watch(tests), "legacy_in_range": legacy_n, "servers": servers, "engines": engines,
