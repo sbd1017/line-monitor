@@ -42,12 +42,12 @@
 |---|---|---|
 | Scheduled full test | every **30 min**, at a random moment inside each slot | ~48 tests/day sample every minute of the hour evenly. A gigabit Ookla test moves ~1.3 GB and occupies the line ~25 s: about 1.4% of the time and ~2 TB/month at full speed (at today's ~135 Mbps it's ~140 MB per test). |
 | Probes | every **60 s** | ~2 KB each. They catch outages and latency between tests. |
-| Confirmation | 2 tests, 2 min apart, after a result < 500 Mbps | separates a blip from a real problem |
+| Confirmation | 2 tests, 2 min apart, after a result below the package's degraded line (Gig1: 565 Mbps, its guaranteed minimum) | separates a blip from a real problem |
 | Burst | every 10 min while confirmed degraded, max 2 h, ends after 2 good results | denser sampling exactly when it matters |
 | Persistent degradation | if ≥ 80% of the last 12 scheduled tests were poor, confirmations and bursts are suspended | when the line is known to be bad, extra tests add load, not information |
 | Daily cap | 96 full tests per local day | safety net |
 | Hard floors (in the agent's code) | scheduled ≥ 5 min apart, burst ≥ 5 min, confirm ≥ 60 s, ≤ 300/day, probes ≥ 10 s | no setting can make it test every five seconds |
-| Quiet check | postpone up to 3 × 30 s if the Pi itself is moving > 50 Mbps | the Pi may be doing other work (a website, a media server) |
+| Quiet check | postpone up to 3 × 30 s if the Pi itself is moving more than 5% of the package's advertised download (at least 5 Mbps; about 57 Mbps on Gig1), or a fixed figure if one is set | the Pi may be doing other work (a website, a media server) |
 | Pre-test probe | if the Internet or router is down, record a failed test (`wan_down`, `lan_fault`, ...) without running the engine | failures are data |
 
 Statistics use **scheduled tests only**. Confirmation, burst and manual tests deliberately over-sample bad
@@ -83,7 +83,7 @@ correct DST handling (`timeutil.LocalClock`).
 `record_hash = SHA-256(canonical JSON of the stream's fields)`, with keys sorted, no spaces, UTF-8, REAL fields as
 floats, and empty text as null. `chain_hash[n] = SHA-256(chain_hash[n-1] ":" stream ":" uuid ":" record_hash[n])`.
 The agent computes the record hash at creation and the backend recomputes and refuses mismatches. The agent
-numbers every record (`agent_seq`), so a lost record shows as a gap (Integrity page). `canonical.py` exists
+numbers every record (`agent_seq`), so a lost record shows as a gap (Integrity, at the bottom of Evidence). `canonical.py` exists
 twice (agent and backend) and a test asserts they're identical. This is tamper-evidence, not certification:
 keep exported ledger heads somewhere else.
 
@@ -96,8 +96,11 @@ engineer visit, a reply, or a fix. Nothing depends on it staying up.
 
 ## Web app (`speedmon/web.py` + `speedmon/static/app/`)
 
-* Phrase entrance (scrypt), server-side sessions (`__Secure-speedtest_session`, Path=/speedtest), CSRF token and
-  Origin check on every POST. Unauthenticated requests get the identical 303/401 for every path.
+* Production sign-in is the site-wide owner login (`SITE_AUTH=1`, `speedmon/site_auth.py`): nginx passes the
+  signed-in user, CSRF token and expiry in headers that are trusted only from localhost and only with the proxy key,
+  so other programs on the Pi can't pose as nginx. Without it (local development) the app falls back to its own
+  phrase entrance (scrypt) with server-side sessions (`__Secure-speedtest_session`, Path=/speedtest). Either way,
+  a CSRF token and Origin check guard every POST, and unauthenticated requests get the identical 303/401 for every path.
 * Vanilla ES modules, no build step and no external assets. CSP `script-src 'self'; style-src 'self'`.
 * Charts: `timechart.js` (canvas, zoom/pan/pinch, crosshair, server-side level of detail through `/api/series`
   and `/api/latency`), `viz.js` (gauge, pulse, heatmap, calendar, DNA, bars, histograms, percentiles,

@@ -38,6 +38,7 @@ RATES = (
 BANK_HOLIDAYS = frozenset((
     "2025-01-01", "2025-04-18", "2025-04-21", "2025-05-05", "2025-05-26", "2025-08-25", "2025-12-25", "2025-12-26",
     "2026-01-01", "2026-04-03", "2026-04-06", "2026-05-04", "2026-05-25", "2026-08-31", "2026-12-25", "2026-12-28",
+    "2027-01-01", "2027-03-26", "2027-03-29", "2027-05-03", "2027-05-31", "2027-08-30", "2027-12-27", "2027-12-28",
 ))
 
 
@@ -80,7 +81,7 @@ def _fetch(conn, sql: str, args: tuple):
 
 
 def reported_for(conn, incident: dict) -> int | None:
-    """Earliest complaint note inside or shortly after the outage: the moment the owner told the ISP."""
+    """Earliest report note (complaint, isp or outage) inside or shortly after the outage: the moment the owner told the ISP."""
     marks = ",".join("?" * len(REPORT_CATEGORIES))
     rows = _fetch(conn, f"SELECT min(start_ms) FROM annotations WHERE deleted_at IS NULL AND category IN ({marks}) "
                         f"AND start_ms >= ? AND start_ms <= ?",
@@ -129,5 +130,5 @@ def assess(conn, from_ms: int, to_ms: int, tz: str, now_ms: int | None = None,
             "amount": round(sum(x["amount"] for x in claimed), 2), "grace_working_days": GRACE_WORKING_DAYS,
             "rate_now": RATES[-1]["per_day"], "rates": [dict(r) for r in RATES],
             "note": "Complete loss of service only, from probe-confirmed outages. A claim needs the fault reported and a "
-                    "note added here with category 'complaint'; the clock then starts two full working days later. "
+                    "note added here with category 'complaint', 'isp' or 'outage'; the clock then starts two full working days later. "
                     "Amounts use the Ofcom rate in force, are a figure to check against a bill, and are not a ruling."}

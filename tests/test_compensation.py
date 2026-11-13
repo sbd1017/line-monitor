@@ -41,6 +41,12 @@ def test_the_clock_skips_bank_holidays():
     assert local_date(compensation.trigger_at(at("2026-04-02T09:00"), TZ)) == date(2026, 4, 9)
 
 
+def test_the_clock_skips_2027_christmas_substitute_days():
+    # reported Thursday 23 Dec 2027: Fri 24 counts, the weekend and the substitute days Mon 27 and Tue 28 don't,
+    # Wed 29 is the second working day, so the clock starts Thursday 30 December
+    assert local_date(compensation.trigger_at(at("2027-12-23T09:00"), TZ)) == date(2027, 12, 30)
+
+
 def test_rates_follow_the_date():
     assert compensation.rate_for(datetime(2025, 6, 1).date()) == 9.98
     assert compensation.rate_for(datetime(2026, 6, 1).date()) == 10.34
@@ -86,6 +92,16 @@ def test_a_late_note_still_finds_its_outage(db):
     inc = incident(at("2026-03-02T10:00"), at("2026-03-02T12:00"), at("2026-03-02T12:30"))
     got = compensation.assess(db, 0, timeutil.now_ms(), "Europe/London", incidents=[inc])
     assert got["incidents"][0]["reported_ms"] == at("2026-03-09T20:00")
+
+
+def test_isp_and_outage_notes_also_start_the_clock(db):
+    for cat in ("isp", "outage"):
+        with db.tx() as c:
+            c.execute("DELETE FROM annotations")
+            note(c, at("2026-03-02T10:05"), category=cat)
+        inc = incident(at("2026-03-02T10:00"), at("2026-03-02T12:00"), at("2026-03-07T09:00"))
+        got = compensation.assess(db, 0, timeutil.now_ms(), "Europe/London", incidents=[inc])
+        assert got["incidents"][0]["status"] == "claimed", cat
 
 
 def test_other_note_categories_do_not_start_the_clock(db):

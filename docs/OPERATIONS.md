@@ -7,8 +7,10 @@ Commands that act as the backend use this prefix, written `SM` below:
 cd /home/pi/line-monitor && sudo -u speedmon env SPEEDMON_ENV=production SPEEDMON_DATA_DIR=$PWD/var .venv/bin/python -m speedmon.cli
 ```
 
-## First-time: set the entrance phrase (you, at a hidden prompt)
-Nobody can sign in until this is done. It's at least 12 characters and never leaves the Pi.
+## Sign-in
+Production uses the site-wide owner login (`SITE_AUTH=1`, see the configuration table below), so no phrase is
+needed there. Without it (local development) the app uses its own entrance phrase, set at a hidden prompt. Nobody
+can sign in that way until it's set. It's at least 12 characters and never leaves the Pi.
 ```bash
 ssh -t pi 'cd /home/pi/line-monitor && sudo -u speedmon env SPEEDMON_ENV=production SPEEDMON_DATA_DIR=$PWD/var .venv/bin/python -m speedmon.cli set-phrase'
 ```
@@ -100,7 +102,7 @@ package's on-target figure can go up to match.
 (`speedmon-epoch-reset.timer`) checks whether it's due. When it is, `scripts/epoch-reset.sh` stops the agent (a
 running test completes), drains its queue, stops the backend, copies the database to `var/archive/<time>-before-reset/`,
 **verifies the copy**, moves the original beside it (nothing is deleted), starts a fresh database (settings carried over,
-new hash chain), clears the agent's scheduling memory and restarts both. The Integrity page then shows the archive's
+new hash chain), clears the agent's scheduling memory and restarts both. The Integrity section on Evidence then shows the archive's
 SHA-256 and the previous ledger head. Watch it: `journalctl -u speedmon-epoch-reset -n 30 --no-pager -o cat`.
 If it fails before archiving, nothing changes and it retries an hour later. The legacy speedtest-cli history goes into
 the archive with everything else; re-import it any time with `SM import-legacy …` (see below) if you want it alongside
@@ -161,7 +163,7 @@ tests/day) whatever is saved.
 3. Keep the current file: `sudo -u speedmon mv $APP/var/speedmon.sqlite3 $APP/var/speedmon.sqlite3.before-restore` (and any `-wal`/`-shm`)
 4. `sudo install -m 0600 -o speedmon -g speedmon /path/to/backup.sqlite3 $APP/var/speedmon.sqlite3`
 5. `sudo systemctl start speedmon speedagent`. The agent re-sends anything newer still in its outbox (duplicates are
-   recognised by UUID). Sequence gaps on the Integrity page show anything that can't be recovered.
+   recognised by UUID). Sequence gaps in the Integrity section on Evidence show anything that can't be recovered.
 
 ## Updating the code
 From your computer, after `.venv/bin/python -m pytest` passes:
@@ -183,7 +185,7 @@ it stops (TimeoutStopSec 180), and queued records are delivered after the restar
 * **ZIP evidence pack**: everything, plus `verify_export.py` (`python3 verify_export.py .` re-checks every hash).
 
 Public IP addresses are left out unless you tick the box. Files are kept 24 h and their SHA-256 is listed on the
-Export and Integrity pages.
+Export page and in the Integrity section on Evidence.
 
 ## Importing old records
 A speedtest-cli CSV log and/or an XLSX of the same columns. The files are only read, and re-running is safe: it only
@@ -211,13 +213,13 @@ page and the audit log say what was removed and where the original is, and the s
 |---|---|
 | Dashboard says **Monitor offline** | `systemctl status speedagent`; `journalctl -u speedagent -n 50`. Was the Pi off? (Events show `rebooted: true`.) |
 | **Queue** growing on the Live page | the backend isn't accepting: `systemctl status speedmon`, `journalctl -u speedmon -n 50`. Records are safe in the outbox. |
-| Quarantined records (Integrity page) | the reason is shown. Fix the cause, then `sudo -u speedagent env SPEEDAGENT_STATE_DIR=/var/lib/speedagent $APP/.venv/bin/python -m speedagent.cli requeue-rejected` |
+| Quarantined records (Integrity, on Evidence) | the reason is shown. Fix the cause, then `sudo -u speedagent env SPEEDAGENT_STATE_DIR=/var/lib/speedagent $APP/.venv/bin/python -m speedagent.cli requeue-rejected` |
 | Tests fail with `engine_missing` | the binary moved: check `/opt/speedmon/engines/` and the unit's `SPEEDAGENT_OOKLA` |
 | Ookla `server_error` | the fallback engine runs automatically; persistent failures mean the server list is unreachable (try Settings → server mode auto) |
 | All tests `wan_down` | the Internet really was unreachable while the router answered: see the outage list |
 | `lan_fault` / `link_down` | the Pi or router side, not counted against the ISP: check the cable and the router |
 | **Pi to router** isn't "cable OK" (below 1 Gb/s or half duplex) | renegotiate or replace the cable. The Pi can't measure a gigabit line on a 100 Mb link |
-| Locked out after wrong phrases | wait 15 min or `sudo systemctl restart speedmon` |
+| Locked out after wrong phrases (phrase entrance only) | wait 15 min or `sudo systemctl restart speedmon` |
 | Verify fails | don't restore over it: keep the file, run `SM verify` and read the problems. Compare with the newest backup's `.head` |
 
 ## Is it the Pi, the LAN or the ISP?

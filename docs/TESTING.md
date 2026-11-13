@@ -17,7 +17,7 @@
 | Scenario | How | Result |
 |---|---|---|
 | Successful measurement | `systemctl kill --kill-whom=main -s USR1 speedagent` | 136.8/20.8 Mbps recorded with diagnostics, ledger entry, nearby server |
-| Confirmation and burst | automatic after a < 500 Mbps result | 2 confirmations, then burst mode, as designed |
+| Confirmation and burst | automatic after a result below the package's degraded line | 2 confirmations, then burst mode, as designed |
 | Backend outage | `systemctl stop speedmon` for 3 min while the agent ran | a confirmation test ran during the outage; records queued, then delivered within seconds of restart; no sequence gaps; integrity OK |
 | Service restart | `systemctl restart speedagent` (several times) | clean stop recorded, `previous_clean_stop: true` on the next start, queue flushed before exit |
 | Internet unavailable | throwaway backend and agent in a systemd sandbox allowing only loopback + LAN (no change to production data or firewall) | probes `wan_down` with the router still answering; scheduled and manual tests recorded as failed `wan_down` |
