@@ -2,6 +2,12 @@
 
 What changed in each release of Line Monitor, newest first.
 
+## v1.9.0 - 2026-11-13
+
+- Automatic compensation now knows the 2027 England and Wales bank holidays.
+- The compensation note on Evidence now says isp and outage notes count as a report, as well as complaint ones.
+- Docs: the confirmation and quiet-check thresholds follow the package, Integrity sits at the bottom of Evidence, and production sign-in uses the site-wide login.
+
 ## v1.8.0 - 2026-11-08
 
 - Timestamp receipts: every hour two public RFC 3161 authorities (FreeTSA and DigiCert) sign a statement of the ledger head, so records can be shown to have existed at that time; stored outside the chain, append-only, re-verified to a trusted root by the weekly check, with `anchor`, `anchors` and `verify-anchors` commands and up to 200 receipts plus a checker in every ZIP pack
