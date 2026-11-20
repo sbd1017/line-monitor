@@ -2,6 +2,10 @@
 
 What changed in each release of Line Monitor, newest first.
 
+## v1.10.0 - 2026-11-20
+
+- Always dark: the unused light palette (data-theme="light") is removed; printed evidence stays black on white
+
 ## v1.9.0 - 2026-11-13
 
 - Automatic compensation now knows the 2027 England and Wales bank holidays.
