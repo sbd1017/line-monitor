@@ -2,8 +2,8 @@
 /* Line Monitor — /speedtest
    Design: a network-operations instrument, not a card grid. Sections are separated by hairline rules and
    numbered mono kickers; panels are used only where something is an instrument (gauge, pulse). Numbers are the
-   loudest thing on the page. Dark is always the default (it does not follow the device's light/dark setting); a light palette exists for an explicit data-theme="light", and the
-   Evidence view switches to a clean paper style for print/PDF.
+   loudest thing on the page. The page is always dark (it does not follow the device's light/dark setting and has no light theme); only the
+   Evidence view switches to a clean paper style when printed or saved as PDF.
    Series colours were validated with the dataviz palette checker (CVD/contrast) for both surfaces. */
 
 :root {
@@ -38,17 +38,6 @@
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
   --r: 10px;
   --gutter: clamp(16px, 3.2vw, 40px);
-}
-/* Dark is the default whatever the device setting. The light palette below applies only when explicitly chosen. */
-:root[data-theme="light"] {
-  color-scheme: light;
-  --page: #f3f5f8; --surface: #fbfcfd; --surface-2: #f1f4f7; --raise: #ffffff;
-  --line: rgba(11, 27, 46, .09); --line-2: rgba(11, 27, 46, .16); --grid: #e4e9ee; --axis: #c7d0d9;
-  --ink: #0b1b2e; --ink-2: #33475b; --mute: #607080; --faint: #9aa7b4;
-  --dl: #0e8fa0; --ul: #6250d6; --lat: #b87a00; --glow: #0e8fa0; --glow-soft: rgba(14, 143, 160, .12);
-  --offline: #9aa7b4;
-  --seq-0: #e9f4f6; --seq-1: #c6e7ec; --seq-2: #98d3dc; --seq-3: #5fb8c6; --seq-4: #2c98a9; --seq-5: #0f7686; --seq-6: #0a4f5b;
-  --div-n3: #c7352a; --div-n2: #e0745a; --div-n1: #f0b9a6; --div-0: #e3e7eb; --div-p1: #a9d9df; --div-p2: #4fb3c0; --div-p3: #0e8a9a;
 }
 
 * { box-sizing: border-box; }
